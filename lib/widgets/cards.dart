@@ -5,18 +5,20 @@ class CustomButton extends StatelessWidget {
   final BuildContext context;
   final String text;
   final IconData icon;
+  final VoidCallback? onTap;
 
   const CustomButton({
     required this.context,
     required this.text,
     required this.icon,
+    this.onTap,
     Key? key,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: () => navigateTo(context, text),
+      onTap: onTap,
       child: Container(
         width: double.infinity,
         height: 80,

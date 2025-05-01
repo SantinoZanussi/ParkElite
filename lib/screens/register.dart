@@ -50,11 +50,14 @@ class RegisterScreen extends StatelessWidget {
                         keyboardType: TextInputType.phone,
                       ),
 
-                      const SizedBox(height: 20),                      
+                      const SizedBox(height: 20),
                       // Fecha de nacimiento
                       BuildInputField(
                         hintText: 'Fecha de nacimiento',
-                        icon: Icon(Icons.calendar_month, color: Colors.grey[700]),
+                        icon: Icon(
+                          Icons.calendar_month,
+                          color: Colors.grey[700],
+                        ),
                         keyboardType: TextInputType.datetime,
                       ),
 
@@ -88,7 +91,7 @@ class RegisterScreen extends StatelessWidget {
                         width: double.infinity,
                         child: ElevatedButton(
                           onPressed: () {
-                            navigateTo(context, 'RegistrarseButton');
+                            navigateTo(context, 'registerCheck');
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF1D2130),

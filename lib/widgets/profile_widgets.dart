@@ -44,7 +44,8 @@ class ProfileHeader extends StatelessWidget {
       children: [
         Stack(
           children: [
-            Container( // foto
+            Container(
+              // foto
               width: 80,
               height: 80,
               decoration: BoxDecoration(
@@ -60,13 +61,13 @@ class ProfileHeader extends StatelessWidget {
                 ],
               ),
               child: ClipRRect(
-                  borderRadius: BorderRadius.circular(60),
-                    child: const Icon(
-                    Icons.person_outline,
-                    color: Color(0xFF32809E),
-                    size: 42,
-                  ),
-              )
+                borderRadius: BorderRadius.circular(60),
+                child: const Icon(
+                  Icons.person_outline,
+                  color: Color(0xFF32809E),
+                  size: 42,
+                ),
+              ),
             ),
           ],
         ),
@@ -97,10 +98,7 @@ class SectionHeader extends StatelessWidget {
           children: const [
             Text(
               'Información personal',
-              style: TextStyle(
-                fontSize: 22,
-                color: Color(0xFF1D2130),
-              ),
+              style: TextStyle(fontSize: 22, color: Color(0xFF1D2130)),
             ),
           ],
         ),
@@ -120,7 +118,11 @@ class PersonalInfoContent extends StatelessWidget {
         children: const [
           InfoItem(icon: '📍', label: 'Domicilio', value: 'Av. dawdawd 325'),
           InfoItem(icon: '📱', label: 'Celular', value: '21342352345'),
-          InfoItem(icon: '📅', label: 'Fecha de Nacimiento', value: '19/04/9111'),
+          InfoItem(
+            icon: '📅',
+            label: 'Fecha de Nacimiento',
+            value: '19/04/9111',
+          ),
           InfoItem(icon: '✉️', label: 'Email', value: 'wadwadwad@gmail.com'),
         ],
       ),
@@ -166,10 +168,7 @@ class InfoItem extends StatelessWidget {
             child: Center(
               child: Text(
                 icon,
-                style: const TextStyle(
-                  fontSize: 24,
-                  color: Colors.white,
-                ),
+                style: const TextStyle(fontSize: 24, color: Colors.white),
               ),
             ),
           ),
@@ -218,10 +217,7 @@ class InfoCredits extends StatelessWidget {
               children: const [
                 Text(
                   "ParkElite",
-                  style: TextStyle(
-                    fontSize: 18,
-                    color: Color(0xFF999999),
-                  ),
+                  style: TextStyle(fontSize: 18, color: Color(0xFF999999)),
                 ),
                 SizedBox(height: 1),
                 Text(

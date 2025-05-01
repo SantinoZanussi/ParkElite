@@ -49,7 +49,8 @@ class BuildInputField extends StatelessWidget {
   }
 }
 
-class PasswordInputField extends StatefulWidget { // Para login
+class PasswordInputField extends StatefulWidget {
+  // Para login
   const PasswordInputField({Key? key}) : super(key: key);
 
   @override
@@ -81,14 +82,17 @@ class _PasswordInputFieldState extends State<PasswordInputField> {
   }
 }
 
-class PasswordRegisterInputField extends StatefulWidget { // Para registrarse
+class PasswordRegisterInputField extends StatefulWidget {
+  // Para registrarse
   const PasswordRegisterInputField({Key? key}) : super(key: key);
 
   @override
-  State<PasswordRegisterInputField> createState() => _PasswordRegisterInputFieldState();
+  State<PasswordRegisterInputField> createState() =>
+      _PasswordRegisterInputFieldState();
 }
 
-class _PasswordRegisterInputFieldState extends State<PasswordRegisterInputField> {
+class _PasswordRegisterInputFieldState
+    extends State<PasswordRegisterInputField> {
   bool _obscurePassword = true;
 
   @override

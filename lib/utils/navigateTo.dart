@@ -2,26 +2,40 @@ import 'package:flutter/material.dart';
 import '../screens/home.dart';
 import '../screens/register.dart';
 import '../screens/login.dart';
+import '../screens/profile.dart';
+import '../screens/notifications.dart';
 
-// Función para navegar a otra pantalla
 void navigateTo(BuildContext context, String screenName) {
-
-  if (screenName == "Login") { // Se ejecuta la lógica para checkear login etc etc
+  if (screenName == "home") {
     Navigator.push(context, MaterialPageRoute(builder: (context) => HomeScreen()));
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text('Navegando a: $screenName')));
-  } else if (screenName == "Registrarse" || screenName == "RegistrarseButton") { // RegistrarseButton = Formulario | Registrarse = Screen
+    )
+  } else if (screenName == "registrarse") { //* registrarseCheck = Formulario para registrarse | Registrarse = Screen
     Navigator.push(context, MaterialPageRoute(builder: (context) => RegisterScreen()));
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text('Navegando a: $screenName')));
+    )
+  } else if (screenName == "registerCheck") { // Logica para registrarse
+
   } else if (screenName == "backLogin") {
     Navigator.push(context, MaterialPageRoute(builder: (context) => LoginScreen()));
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text('Navegando a: $screenName')));
+    )
+  } else if (screenName == "perfil") {
+    Navigator.push(context, MaterialPageRoute(builder: (context) => ProfileScreen()));
+    ScaffoldMessenger.of(
+      context,
+    )
+  } else if (screenName == "notificaciones") {
+    Navigator.push(context, MaterialPageRoute(builder: (context) => NotificationsScreen()));
+    ScaffoldMessenger.of(
+      context,
+    )
+  } else if (["reservas", "desarrolladores", "config", "contacto", "tarifas"].contains(screenName)) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Navegando a: $screenName (Pantalla no implementada)')));
   }
-  // Aquí más adelante podrías agregar la navegación real a una pantalla específica
-  // Navigator.push(context, MaterialPageRoute(builder: (context) => NewScreen()));
 }

@@ -111,7 +111,7 @@ class LoginScreen extends StatelessWidget {
                           ),
                           GestureDetector(
                             onTap: () {
-                              navigateTo(context, 'Registrarse');
+                              navigateTo(context, 'registrarse');
                             },
                             child: const Text(
                               'Regístrate',
