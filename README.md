@@ -40,21 +40,21 @@ Los estacionamientos mal gestionados generan congestión y pérdida de tiempo. P
 
 ---
 
-## 👥 Creadores
-
-Este proyecto fue desarrollado por:
-
-- 👨‍💻 **Santino Zanussi**
-- 👨‍💻 **Juan Manuel Goiburu**
-
----
-
 ## 💡 ¿A quién beneficia?
 
 - **Usuarios del estacionamiento:** Acceso rápido a espacios disponibles.
 - **Administradores:** Gestión optimizada y reducción de personal requerido.
 - **Empresas y comercios:** Mejor experiencia del cliente.
 - **Ciudades:** Menor congestión vehicular en busca de estacionamiento.
+
+---
+
+## 👥 Creadores
+
+Este proyecto fue desarrollado por:
+
+- 👨‍💻 **Santino Zanussi**
+- 👨‍💻 **Juan Manuel Goiburu**
 
 ---
 
