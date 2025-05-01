@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../screens/home_screen.dart';
-import '../screens/register_screen.dart';
-import '../screens/login_screen.dart';
+import '../screens/home.dart';
+import '../screens/register.dart';
+import '../screens/login.dart';
 
 // Función para navegar a otra pantalla
 void navigateTo(BuildContext context, String screenName) {

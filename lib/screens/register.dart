@@ -17,16 +17,16 @@ class RegisterScreen extends StatelessWidget {
                 Container(
                   width: double.infinity,
                   constraints: const BoxConstraints(maxWidth: 500),
-                  margin: const EdgeInsets.only(bottom: 75),
+                  margin: const EdgeInsets.only(bottom: 30),
                   child: ClipRRect(
                     child: SizedBox(
-                      height: 280,
+                      height: 220,
                       child: Image.asset(
                         'assets/images/login.png',
                         fit: BoxFit.cover,
                         errorBuilder:
                             (context, error, stackTrace) => Container(
-                              height: 280,
+                              height: 220,
                               color: Colors.grey[300],
                               child: const Center(
                                 child: Text('Imagen no disponible'),
@@ -43,6 +43,30 @@ class RegisterScreen extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 15),
                   child: Column(
                     children: [
+                      // Celular
+                      BuildInputField(
+                        hintText: 'Celular',
+                        icon: Icon(Icons.local_phone, color: Colors.grey[700]),
+                        keyboardType: TextInputType.phone,
+                      ),
+
+                      const SizedBox(height: 20),                      
+                      // Fecha de nacimiento
+                      BuildInputField(
+                        hintText: 'Fecha de nacimiento',
+                        icon: Icon(Icons.calendar_month, color: Colors.grey[700]),
+                        keyboardType: TextInputType.datetime,
+                      ),
+
+                      const SizedBox(height: 20),
+                      // Domicilio
+                      BuildInputField(
+                        hintText: 'Domicilio',
+                        icon: Icon(Icons.home, color: Colors.grey[700]),
+                        keyboardType: TextInputType.streetAddress,
+                      ),
+
+                      const SizedBox(height: 20),
                       // Email
                       BuildInputField(
                         hintText: 'Email',
