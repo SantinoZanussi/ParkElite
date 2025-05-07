@@ -3,6 +3,7 @@ import './screens/home.dart';
 import './screens/login.dart';
 import './screens/register.dart';
 import './screens/profile.dart';
+import './screens/reservations.dart';
 
 void main() {
   runApp(const MyApp());
@@ -17,7 +18,7 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'ParkElite',
       theme: ThemeData(fontFamily: 'SanFrancisco', useMaterial3: true),
-      home: const HomeScreen(),
+      home: const ReservationsScreen(),
     );
   }
 }
