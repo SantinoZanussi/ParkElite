@@ -43,13 +43,26 @@ class RegisterScreen extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 15),
                   child: Column(
                     children: [
+                      // Nombre
+                      BuildInputField(
+                        hintText: 'Nombre',
+                        icon: Icon(Icons.person, color: Colors.grey[700]),
+                        keyboardType: TextInputType.name,
+                      ),
+                      const SizedBox(height: 20),
+                      // Apellido
+                      BuildInputField(
+                        hintText: 'Apellido',
+                        icon: Icon(Icons.person, color: Colors.grey[700]),
+                        keyboardType: TextInputType.name,
+                      ),
+                      const SizedBox(height: 20),
                       // Celular
                       BuildInputField(
                         hintText: 'Celular',
                         icon: Icon(Icons.local_phone, color: Colors.grey[700]),
                         keyboardType: TextInputType.phone,
                       ),
-
                       const SizedBox(height: 20),
                       // Fecha de nacimiento
                       BuildInputField(
@@ -60,7 +73,6 @@ class RegisterScreen extends StatelessWidget {
                         ),
                         keyboardType: TextInputType.datetime,
                       ),
-
                       const SizedBox(height: 20),
                       // Domicilio
                       BuildInputField(
@@ -68,7 +80,6 @@ class RegisterScreen extends StatelessWidget {
                         icon: Icon(Icons.home, color: Colors.grey[700]),
                         keyboardType: TextInputType.streetAddress,
                       ),
-
                       const SizedBox(height: 20),
                       // Email
                       BuildInputField(

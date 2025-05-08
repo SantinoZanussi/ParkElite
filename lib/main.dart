@@ -18,7 +18,7 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'ParkElite',
       theme: ThemeData(fontFamily: 'SanFrancisco', useMaterial3: true),
-      home: const ReservationsScreen(),
+      home: const HomeScreen(),
     );
   }
 }
