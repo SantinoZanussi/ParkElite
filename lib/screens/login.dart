@@ -1,11 +1,27 @@
 import 'package:flutter/material.dart';
 import '../utils/navigateTo.dart';
 import '../widgets/inputFields.dart';
+import '../services/api_service.dart';
 
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
 
   @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final TextEditingController emailController = TextEditingController();
+  final TextEditingController passwordController = TextEditingController();
+
+  @override
+
+  void dispose() {
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
+
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
@@ -48,12 +64,13 @@ class LoginScreen extends StatelessWidget {
                         hintText: 'Email',
                         icon: Icon(Icons.email, color: Colors.grey[700]),
                         keyboardType: TextInputType.emailAddress,
+                        controller: emailController,
                       ),
 
                       const SizedBox(height: 20),
 
                       // Contraseña
-                      const PasswordInputField(),
+                      PasswordInputField(controller: passwordController),
 
                       const SizedBox(height: 40),
 
@@ -62,6 +79,39 @@ class LoginScreen extends StatelessWidget {
                         width: double.infinity,
                         child: ElevatedButton(
                           onPressed: () {
+                            final email = emailController.text;
+                            final password = passwordController.text;
+                            if (email.isEmpty || password.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Por favor completa todos los campos'),
+                                ),
+                              );
+                              return;
+                            } else {
+                              ApiService().login(email, password).then((value) {
+                                if (value['status'] == 'success') {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Inicio de sesión exitoso'),
+                                    ),
+                                  );
+                                  navigateTo(context, 'home');
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Error al iniciar sesión'),
+                                    ),
+                                  );
+                                }
+                              }).catchError((error) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Error de conexión'),
+                                  ),
+                                );
+                              });
+                            }
                             navigateTo(context, 'Login');
                           },
                           style: ElevatedButton.styleFrom(

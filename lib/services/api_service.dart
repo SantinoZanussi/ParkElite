@@ -1,20 +1,19 @@
-// lib/services/api_service.dart (corregido)
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ApiService {
-  final String baseUrl = Platform.isAndroid 
+  final String localNetworkIP = "181.230.199.209";
+  late final String baseUrl = Platform.isAndroid 
       ? 'http://10.0.2.2:5000/api' // Para emulador Android (10.0.2.2 apunta a localhost de la máquina host)
-      : 'http://localhost:5000/api'; // Para iOS o dispositivos físicos, ajustar según necesidad
+      : 'http://$localNetworkIP:5000/api'; // Para iOS o dispositivos físicos, ajustar según necesidad
       
   final storage = FlutterSecureStorage();
 
   // token
   Future<String?> getToken() async {
-    return "test_token";
-    // return await storage.read(key: 'auth_token');
+    return await storage.read(key: 'auth_token');
   }
 
   // login
@@ -26,10 +25,11 @@ class ApiService {
         body: jsonEncode({'email': email, 'password': password}),
       );
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
-        await storage.write(key: 'auth_token', value: data['token']);
-        return data;
+        final token = data['token'];
+        await storage.write(key: 'auth_token', value: token);
+        return { 'dataUser': data['user'], 'status': 'success', 'statusCode': response.statusCode };
       } else {
         throw Exception('Error al iniciar sesión: ${response.statusCode}');
       }
@@ -56,10 +56,11 @@ class ApiService {
         body: jsonEncode({'name': name, 'last_name': last_name, 'email': email, 'password': password, 'phone_number': phone_number, 'birthday': birthday, 'home_address': home_address,}),
       );
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
-        await storage.write(key: 'auth_token', value: data['token']);
-        return data;
+        final token = data['token'];
+        await storage.write(key: 'auth_token', value: token);
+        return { 'dataUser': data['user'], 'status': 'success', 'statusCode': response.statusCode };
       } else {
         throw Exception('Error al registrarse: ${response.statusCode}');
       }

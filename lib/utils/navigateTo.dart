@@ -17,8 +17,6 @@ void navigateTo(BuildContext context, String screenName) {
     ScaffoldMessenger.of(
       context,
     );
-  } else if (screenName == "registerCheck") { // Logica para registrarse
-
   } else if (screenName == "backLogin") {
     Navigator.push(context, MaterialPageRoute(builder: (context) => LoginScreen()));
     ScaffoldMessenger.of(

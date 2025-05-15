@@ -1,5 +1,6 @@
 const express = require('express');
 const mongoose = require('mongoose');
+const cors = require('cors');
 const connectDB = require('./config/db');
 require('dotenv').config();
 
@@ -7,11 +8,13 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(express.json());
+app.use(cors());
 
 //* API ROUTES
 const reservationRoutes = require('./routes/reservationRoutes');
-
+const userRoutes = require('./routes/userRoutes');
 app.use('/api/reservas', reservationRoutes);
+app.use('/api/auth', userRoutes);
 
 //! Middleware para manejar 404 en rutas API
 /*
@@ -22,7 +25,7 @@ app.all('/api/*', (req, res) => {
 
 //* Iniciar servidor
 connectDB().then(() => {
-    app.listen(PORT, () => {
+    app.listen(PORT, '0.0.0.0', () => {
         console.log(`Servidor corriendo en http://localhost:${PORT}`);
     });
 }).catch(err => {
@@ -32,4 +35,5 @@ connectDB().then(() => {
 /* .env info
 MONGO_URL = mongodb+srv://DBUser:porriki319@cluster0.tscwgzd.mongodb.net/
 PORT = 5000
+JWT_SECRET = 1234567890
 */
