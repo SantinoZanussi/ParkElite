@@ -2,12 +2,47 @@ import 'package:flutter/material.dart';
 import '../widgets/cards.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../utils/navigateTo.dart';
+import '../services/api_service.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
 
   @override
+  _HomeScreen createState() => _HomeScreen();
+}
+
+class _HomeScreen extends State<HomeScreen> {
+  final api = ApiService();
+  String? userName;
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    loadUser();
+  }
+
+  Future<void> loadUser() async {
+    try {
+      final data = await api.getUser();
+      setState(() {
+        userName = data['name'];
+        isLoading = false;
+      });
+    } catch (e) {
+      print('Error al cargar usuario: $e');
+      setState(() {
+        isLoading = false;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (isLoading) {
+      return const CircularProgressIndicator();
+    }
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: Stack(
@@ -54,11 +89,11 @@ class HomeScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 15),
-                    const Column(
+                    Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '¡Hola Santino!', // Aca iria una util (función) que obtenga el nombre del usuario
+                          userName!,
                           style: TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.w900,
@@ -84,7 +119,6 @@ class HomeScreen extends StatelessWidget {
                 ),
               ),
 
-              // Shortcuts grid - Con tamaño fijo y ubicación exacta
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20.0),
                 child: Row(
@@ -127,10 +161,10 @@ class HomeScreen extends StatelessWidget {
                           const SizedBox(height: 15),
                           CustomButton(
                             context: context,
-                            text: 'Contacto',
-                            icon: Icons.local_phone,
+                            text: 'Configuración',
+                            icon: Icons.settings,
                             onTap: () {
-                              navigateTo(context, 'contacto');
+                              navigateTo(context, 'config');
                             },
                           ),
                         ],
@@ -140,7 +174,7 @@ class HomeScreen extends StatelessWidget {
                 ),
               ),
 
-              // Empty space - El resto queda en blanco
+              //El resto queda en blanco
               const Expanded(child: SizedBox()),
             ],
           ),

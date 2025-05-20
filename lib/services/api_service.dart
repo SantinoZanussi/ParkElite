@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../utils/navigateTo.dart';
 
 class ApiService {
   final String localNetworkIP = "181.230.199.209";
@@ -10,7 +11,6 @@ class ApiService {
       : 'http://$localNetworkIP:5000/api'; // Para iOS o dispositivos físicos, ajustar según necesidad
       
   final storage = FlutterSecureStorage();
-
   // token
   Future<String?> getToken() async {
     return await storage.read(key: 'auth_token');
@@ -70,14 +70,37 @@ class ApiService {
     }
   }
 
+  // obtener datos del usuario
+  Future<Map<String, dynamic>> getUser() async {
+    try {
+      final token = await getToken();
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/auth/getUser'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json'
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception('Error al obtener las reservas: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error de conexión en getUser: $e');
+      throw Exception('Error de conexión: $e');
+    }
+  }
+
   // obtener reservas del usuario
   Future<List<dynamic>> getUserReservations() async {
     try {
       final token = await getToken();
-      final userId = "usuario_actual"; // En un caso real, obtendrías esto del token o storage
       
       final response = await http.get(
-        Uri.parse('$baseUrl/reservas/$userId'),
+        Uri.parse('$baseUrl/reservas'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json'
@@ -124,6 +147,16 @@ class ApiService {
       }
     } catch (e) {
       print('Error de conexión en createReservation: $e');
+      throw Exception('Error de conexión: $e');
+    }
+  }
+
+  //unlogout
+  Future<void> unlogout() async {
+    try {
+      await storage.delete(key: 'auth_token');
+    } catch (e) {
+      print('Error de conexión en unlogout: $e');
       throw Exception('Error de conexión: $e');
     }
   }

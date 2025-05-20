@@ -5,6 +5,7 @@ import '../screens/login.dart';
 import '../screens/profile.dart';
 import '../screens/notifications.dart';
 import '../screens/reservations.dart';
+import '../screens/config.dart';
 
 void navigateTo(BuildContext context, String screenName) {
   if (screenName == "home") {
@@ -37,7 +38,12 @@ void navigateTo(BuildContext context, String screenName) {
     ScaffoldMessenger.of(
       context,
     );
-  } else if (["desarrolladores", "config", "contacto", "tarifas"].contains(screenName)) {
+  } else if (screenName == "config") {
+    Navigator.push(context, MaterialPageRoute(builder: (context) => ConfigScreen()));
+    ScaffoldMessenger.of(
+      context,
+    );
+  } else if (["desarrolladores", "contacto", "tarifas"].contains(screenName)) {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text('Navegando a: $screenName (Pantalla no implementada)')));

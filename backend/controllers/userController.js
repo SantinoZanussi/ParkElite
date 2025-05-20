@@ -27,10 +27,11 @@ exports.loginUser = async (req, res) => {
 // Obtener datos de usuario
 exports.getUser = async (req, res) => {
     try {
-        const users = await User.find({ 
+        const user = await User.findOne({ 
           userId: req.user.id 
-        }).populate('User');
-        res.json(users);
+        });
+        if (!user) return res.status(404).json({ message: 'Usuario no encontrado' });
+        res.json(user);
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: 'Error del servidor' });

@@ -51,6 +51,60 @@ class CustomButton extends StatelessWidget {
   }
 }
 
+class ConfigCustomButton extends StatelessWidget {
+  final BuildContext context;
+  final String text;
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  const ConfigCustomButton({
+    required this.context,
+    required this.text,
+    required this.icon,
+    this.onTap,
+    Key? key,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        height: 75,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.15),
+              spreadRadius: 0,
+              blurRadius: 12,
+              offset: const Offset(0, 0),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+          mainAxisAlignment: MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(icon, color: const Color(0xFF1D2130), size: 30),
+              const SizedBox(width: 20),
+              Text(
+                text,
+                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
+                textAlign: TextAlign.right,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class buildNavItem extends StatelessWidget {
   final BuildContext context;
   final IconData icon;

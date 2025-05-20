@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/api_service.dart';
 
 class ProfileContainer extends StatelessWidget {
   const ProfileContainer({Key? key}) : super(key: key);
@@ -24,9 +25,7 @@ class ProfileContainer extends StatelessWidget {
         padding: const EdgeInsets.all(20.0),
         child: Column(
           children: const [
-            ProfileHeader(),
-            SectionHeader(),
-            PersonalInfoContent(),
+            PersonalInfoContentFuture(),
             InfoCredits(),
           ],
         ),
@@ -36,7 +35,9 @@ class ProfileContainer extends StatelessWidget {
 }
 
 class ProfileHeader extends StatelessWidget {
-  const ProfileHeader({Key? key}) : super(key: key);
+  final String nombre;
+
+  const ProfileHeader({Key? key, required this.nombre}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -72,8 +73,8 @@ class ProfileHeader extends StatelessWidget {
           ],
         ),
         const SizedBox(width: 18),
-        const Text(
-          'Francisco Aiello',
+        Text(
+          nombre,
           style: TextStyle(
             fontSize: 25,
             fontWeight: FontWeight.bold,
@@ -102,29 +103,6 @@ class SectionHeader extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class PersonalInfoContent extends StatelessWidget {
-  const PersonalInfoContent({Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 15.0),
-      child: Column(
-        children: const [
-          InfoItem(icon: '📍', label: 'Domicilio', value: 'Av. dawdawd 325'),
-          InfoItem(icon: '📱', label: 'Celular', value: '21342352345'),
-          InfoItem(
-            icon: '📅',
-            label: 'Fecha de Nacimiento',
-            value: '19/04/9111',
-          ),
-          InfoItem(icon: '✉️', label: 'Email', value: 'wadwadwad@gmail.com'),
-        ],
       ),
     );
   }
@@ -233,6 +211,73 @@ class InfoCredits extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class PersonalInfoContentFuture extends StatefulWidget {
+  const PersonalInfoContentFuture({Key? key}) : super(key: key);
+
+  @override
+  _PersonalInfoContentFutureState createState() => _PersonalInfoContentFutureState();
+}
+
+class _PersonalInfoContentFutureState extends State<PersonalInfoContentFuture> {
+  final api = ApiService();
+  Map<String, dynamic>? userData;
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    loadUser();
+  }
+
+  Future<void> loadUser() async {
+    try {
+      final data = await api.getUser();
+      setState(() {
+        userData = data;
+        isLoading = false;
+      });
+    } catch (e) {
+      print('Error al cargar usuario: $e');
+      setState(() {
+        isLoading = false;
+      });
+    }
+  }
+
+  String formatFecha(String fechaIso) {
+    try {
+      final fecha = DateTime.parse(fechaIso);
+      return '${fecha.day.toString().padLeft(2, '0')}/${fecha.month.toString().padLeft(2, '0')}/${fecha.year}';
+    } catch (e) {
+      return 'N/A';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading) {
+      return const CircularProgressIndicator();
+    }
+
+    if (userData == null) {
+      return const Text('Error al cargar datos del usuario');
+    }
+
+    var telefono = userData!['phone_number'].toString() ?? 'N/A';
+
+    return Column(
+      children: [
+        ProfileHeader(nombre: userData!['name'] ?? 'Nombre no disponible'),
+        const SectionHeader(),
+        InfoItem(icon: '📍', label: 'Domicilio', value: userData!['home_address'] ?? 'N/A'),
+        InfoItem(icon: '📱', label: 'Celular', value: telefono),
+        InfoItem(icon: '📅', label: 'Fecha de Nacimiento', value: formatFecha(userData!['birthday'])),
+        InfoItem(icon: '✉️', label: 'Email', value: userData!['email'] ?? 'N/A'),
+      ],
     );
   }
 }
