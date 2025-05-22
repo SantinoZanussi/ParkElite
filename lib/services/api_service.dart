@@ -2,13 +2,14 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import '../utils/navigateTo.dart';
+import '../utils/connectivity_service.dart';
 
 class ApiService {
   final String localNetworkIP = "181.230.199.209";
+  final String localNetworkIPEscuela = "190.139.136.234";
   late final String baseUrl = Platform.isAndroid 
       ? 'http://10.0.2.2:5000/api' // Para emulador Android (10.0.2.2 apunta a localhost de la máquina host)
-      : 'http://$localNetworkIP:5000/api'; // Para iOS o dispositivos físicos, ajustar según necesidad
+      : 'http://$localNetworkIPEscuela:5000/api'; // Para iOS o dispositivos físicos, ajustar según necesidad
       
   final storage = FlutterSecureStorage();
   // token
@@ -19,6 +20,9 @@ class ApiService {
   // login
   Future<Map<String, dynamic>> login(String email, String password) async {
     try {
+      final internet = await ConnectivityService.hasInternet();
+      if (!internet) { throw Exception('❎ No hay conexión a internet.'); }
+
       final response = await http.post(
         Uri.parse('$baseUrl/auth/login'),
         headers: {'Content-Type': 'application/json'},
@@ -50,6 +54,9 @@ class ApiService {
     String home_address,
     ) async {
     try {
+      final internet = await ConnectivityService.hasInternet();
+      if (!internet) { throw Exception('❎ No hay conexión a internet.'); }
+
       final response = await http.post(
         Uri.parse('$baseUrl/auth/register'),
         headers: {'Content-Type': 'application/json'},
@@ -73,6 +80,9 @@ class ApiService {
   // obtener datos del usuario
   Future<Map<String, dynamic>> getUser() async {
     try {
+      final internet = await ConnectivityService.hasInternet();
+      if (!internet) { throw Exception('❎ No hay conexión a internet.'); }
+
       final token = await getToken();
 
       final response = await http.get(
@@ -97,6 +107,9 @@ class ApiService {
   // obtener reservas del usuario
   Future<List<dynamic>> getUserReservations() async {
     try {
+      final internet = await ConnectivityService.hasInternet();
+      if (!internet) { throw Exception('❎ No hay conexión a internet.'); }
+
       final token = await getToken();
       
       final response = await http.get(
@@ -125,6 +138,9 @@ class ApiService {
     DateTime endTime
   ) async {
     try {
+      final internet = await ConnectivityService.hasInternet();
+      if (!internet) { throw Exception('❎ No hay conexión a internet.'); }
+
       final token = await getToken();
       
       final response = await http.post(
