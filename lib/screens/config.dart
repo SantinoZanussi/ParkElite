@@ -3,12 +3,84 @@ import '../widgets/cards.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../utils/navigateTo.dart';
 import '../services/api_service.dart';
+import '../utils/connectivity_service.dart';
 
-class ConfigScreen extends StatelessWidget {
-  const ConfigScreen({Key? key}) : super(key: key);
+class ConfigScreen extends StatefulWidget {
+  ConfigScreen({Key? key}) : super(key: key);
 
   @override
+  State<ConfigScreen> createState() => _ConfigScreenState();
+}
+
+class _ConfigScreenState extends State<ConfigScreen> {
+  bool isLoading = true;
+  bool hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    loadConnectionStatus();
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
+  Future<void> loadConnectionStatus() async {
+    await checkServerConnection(
+      onSuccess: () {
+        setState(() {
+          isLoading = false;
+          hasError = false;
+        });
+      },
+      onError: () {
+        setState(() {
+          isLoading = false;
+          hasError = true;
+        });
+      },
+    );
+  }
+
   Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (hasError) {
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, color: Colors.red, size: 60),
+              const SizedBox(height: 20),
+              const Text(
+                '❌ No se pudo conectar con el servidor.\nVerificá tu conexión o intentá más tarde.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 18),
+              ),
+              const SizedBox(height: 30),
+              ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    isLoading = true;
+                    hasError = false;
+                  });
+                  loadConnectionStatus(); // Reintenta la carga
+                },
+                child: const Text('Reintentar'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: Stack(

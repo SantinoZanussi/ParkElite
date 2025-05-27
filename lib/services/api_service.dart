@@ -9,7 +9,7 @@ class ApiService {
   final String localNetworkIPEscuela = "190.139.136.234";
   late final String baseUrl = Platform.isAndroid 
       ? 'http://10.0.2.2:5000/api' // Para emulador Android (10.0.2.2 apunta a localhost de la máquina host)
-      : 'http://$localNetworkIPEscuela:5000/api'; // Para iOS o dispositivos físicos, ajustar según necesidad
+      : 'http://$localNetworkIP:5000/api'; // Para iOS o dispositivos físicos, ajustar según necesidad
       
   final storage = FlutterSecureStorage();
   // token
@@ -176,4 +176,29 @@ class ApiService {
       throw Exception('Error de conexión: $e');
     }
   }
+
+Future<Map<String, dynamic>> checkServerStatus() async {
+  final internet = await ConnectivityService.hasInternet();
+  //print('🌐 Conexión a internet: $internet');
+  if (!internet) throw Exception('❎ No hay conexión a internet.');
+
+  final url = '$baseUrl/health-check';
+  //print('➡️ Llamando a: $url');
+  final response = await http.get(Uri.parse(url));
+  //print('⬅️ Código de respuesta: ${response.statusCode}');
+  //print('⬅️ Cuerpo: ${response.body}');
+
+  if (response.statusCode == 200) {
+    final data = jsonDecode(response.body);
+    //print('📦 Respuesta decodificada: $data');
+    if (data['message'] == 'OK') {
+      return {'status': 'success', 'message': data['message']};
+    } else {
+      throw Exception('El servidor no está disponible: ${data['message']}');
+    }
+  } else {
+    throw Exception('Error al verificar estado del servidor: ${response.statusCode}');
+  }
+}
+
 }

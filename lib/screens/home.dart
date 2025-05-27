@@ -3,6 +3,7 @@ import '../widgets/cards.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../utils/navigateTo.dart';
 import '../services/api_service.dart';
+import '../utils/connectivity_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -12,7 +13,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreen extends State<HomeScreen> {
-  final api = ApiService();
+  final ApiService api = ApiService();
   String? userName;
   bool isLoading = true;
   bool hasError = false;
@@ -20,6 +21,7 @@ class _HomeScreen extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    loadConnectionStatus();
     loadUser();
   }
 
@@ -42,6 +44,23 @@ class _HomeScreen extends State<HomeScreen> {
         isLoading = false;
       });
     }
+  } 
+
+  Future<void> loadConnectionStatus() async {
+    await checkServerConnection(
+      onSuccess: () {
+        setState(() {
+          isLoading = false;
+          hasError = false;
+        });
+      },
+      onError: () {
+        setState(() {
+          isLoading = false;
+          hasError = true;
+        });
+      },
+    );
   }
 
   @override
@@ -72,7 +91,7 @@ class _HomeScreen extends State<HomeScreen> {
                     isLoading = true;
                     hasError = false;
                   });
-                  loadUser(); // Reintenta la carga
+                  loadConnectionStatus(); // Reintenta la carga
                 },
                 child: const Text('Reintentar'),
               ),
@@ -82,7 +101,6 @@ class _HomeScreen extends State<HomeScreen> {
       );
     }
 
-    // Vista normal si todo salió bien
     return Scaffold(
       backgroundColor: Colors.white,
       body: Stack(
