@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../utils/connectivity_service.dart';
+import 'dart:async';
 
 class ApiService {
   final String localNetworkIP = "181.230.199.209";
@@ -182,9 +183,10 @@ Future<Map<String, dynamic>> checkServerStatus() async {
   //print('🌐 Conexión a internet: $internet');
   if (!internet) throw Exception('❎ No hay conexión a internet.');
 
+  try {
   final url = '$baseUrl/health-check';
   //print('➡️ Llamando a: $url');
-  final response = await http.get(Uri.parse(url));
+  final response = await http.get(Uri.parse(url)).timeout(Duration(seconds: 7));
   //print('⬅️ Código de respuesta: ${response.statusCode}');
   //print('⬅️ Cuerpo: ${response.body}');
 
@@ -199,6 +201,14 @@ Future<Map<String, dynamic>> checkServerStatus() async {
   } else {
     throw Exception('Error al verificar estado del servidor: ${response.statusCode}');
   }
+  } on TimeoutException catch (e) {
+    //print('⏳ Timeout al verificar estado del servidor: $e');
+    throw Exception('El servidor no responde. Inténtalo más tarde.');
+  } catch (e) {
+    //print('🔴 Error al verificar estado del servidor: $e');
+    throw Exception('Error de conexión: $e');
+  }
+
 }
 
 }
