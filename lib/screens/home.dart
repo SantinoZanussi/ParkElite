@@ -93,7 +93,7 @@ class _HomeScreen extends State<HomeScreen> {
                   });
                   loadConnectionStatus(); // Reintenta la carga
                 },
-                child: const Text('Reintentar'),
+                child: const Text('Reintentar', style: TextStyle(color: Colors.red)),
               ),
             ],
           ),

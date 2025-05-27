@@ -73,7 +73,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
                   });
                   loadConnectionStatus(); // Reintenta la carga
                 },
-                child: const Text('Reintentar'),
+                child: const Text('Reintentar', style: TextStyle(color: Colors.red)),
               ),
             ],
           ),

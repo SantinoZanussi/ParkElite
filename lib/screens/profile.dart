@@ -68,7 +68,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   });
                   loadConnectionStatus(); // Reintenta la carga
                 },
-                child: const Text('Reintentar'),
+                child: const Text('Reintentar', style: TextStyle(color: Colors.red)),
               ),
             ],
           ),

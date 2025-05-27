@@ -89,7 +89,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   });
                   loadConnectionStatus(); // Reintenta la carga
                 },
-                child: const Text('Reintentar'),
+                child: const Text('Reintentar', style: TextStyle(color: Colors.red)),
               ),
             ],
           ),
