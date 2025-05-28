@@ -17,6 +17,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController phone_numberController = TextEditingController();
   final TextEditingController birthdayController = TextEditingController();
   final TextEditingController home_addressController = TextEditingController();
+  final TextEditingController uidController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   final TextEditingController confirmPasswordController = TextEditingController();
@@ -37,6 +38,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     phone_numberController.dispose();
     birthdayController.dispose();
     home_addressController.dispose();
+    uidController.dispose();
     emailController.dispose();
     passwordController.dispose();
     confirmPasswordController.dispose();
@@ -154,7 +156,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                       const SizedBox(height: 20),
                       BuildInputField(
-                        hintText: 'Fecha de nacimiento',
+                        hintText: 'Fecha de nacimiento (DD/MM/AAAA)',
                         icon: Icon(Icons.calendar_month, color: Colors.grey[700]),
                         keyboardType: TextInputType.datetime,
                         controller: birthdayController,
@@ -165,6 +167,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         icon: Icon(Icons.home, color: Colors.grey[700]),
                         keyboardType: TextInputType.streetAddress,
                         controller: home_addressController,
+                      ),
+                      const SizedBox(height: 20),
+                      BuildInputField(
+                        hintText: 'UID (Tarjeta RFID)',
+                        icon: Icon(Icons.payment, color: Colors.grey[700]),
+                        keyboardType: TextInputType.text,
+                        controller: uidController,
                       ),
                       const SizedBox(height: 20),
                       BuildInputField(
@@ -187,10 +196,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             final celular = phone_numberController.text;
                             final fechaNacimiento = birthdayController.text;
                             final domicilio = home_addressController.text;
+                            final uid_rfid = uidController.text;
                             final email = emailController.text;
                             final password = passwordController.text;
                             final confirmPassword = confirmPasswordController.text;
-                            if (nombre.isEmpty || apellido.isEmpty || fechaNacimiento.isEmpty || domicilio.isEmpty || confirmPassword.isEmpty || email.isEmpty || password.isEmpty) {
+                            if (nombre.isEmpty || apellido.isEmpty || fechaNacimiento.isEmpty || domicilio.isEmpty || confirmPassword.isEmpty || uid_rfid.isEmpty || email.isEmpty || password.isEmpty) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                   content: Text('Por favor completa todos los campos'),
@@ -204,10 +214,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 ),
                               );
                               return;
+                            } else if (!RegExp(r'^[0-9A-F]+$').hasMatch(uid_rfid.replaceAll(':', '').toUpperCase()) ||
+           !(uid_rfid.replaceAll(':', '').toUpperCase().length == 8 || uid_rfid.replaceAll(':', '').toUpperCase().length == 14)) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('UID inválido. Debe ser un código hexadecimal de 8 o 14 caracteres.'),
+                                ),
+                              );
+                              return;
                             } else {
                               await ApiService().register(
                                 nombre,
                                 apellido,
+                                uid_rfid,
                                 email,
                                 password,
                                 celular,

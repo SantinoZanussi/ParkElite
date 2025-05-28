@@ -40,7 +40,7 @@ exports.getUser = async (req, res) => {
 
 // register
 exports.createUser = async (req, res) => {
-    let { name, last_name, birthday, home_address, phone_number, email, password  } = req.body;
+    let { name, last_name, uid_rfid, birthday, home_address, phone_number, email, password  } = req.body;
     let user_id = new mongoose.Types.ObjectId();
 
     // Cambiar el formato de la fecha de nacimiento
@@ -55,6 +55,7 @@ exports.createUser = async (req, res) => {
     try {
         const user = new User({
             userId: user_id,
+            uid_rfid: uid_rfid,
             name: name,
             last_name: last_name,
             birthday: birthday,

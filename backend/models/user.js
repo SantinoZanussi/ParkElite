@@ -1,13 +1,17 @@
 const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
-    name: {
-        type: String,
-        required: true
-    },
     userId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
+        required: true
+    },
+    uid_rfid: {
+        type: String,
+        required: true
+    },
+    name: {
+        type: String,
         required: true
     },
     last_name: {
