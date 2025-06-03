@@ -14,16 +14,22 @@ class DateSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final today = DateTime.now();
     final daysInMonth = DateUtils.getDaysInMonth(date.year, date.month);
+
+    // Filtrar días anteriores al día actual
+    final validDays = List.generate(daysInMonth, (index) => index + 1)
+        .where((day) => DateTime(date.year, date.month, day).isAfter(today.subtract(const Duration(days: 1))))
+        .toList();
 
     return SizedBox(
       height: 70,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemCount: daysInMonth,
+        itemCount: validDays.length,
         separatorBuilder: (_, __) => const SizedBox(width: 10),
         itemBuilder: (context, index) {
-          final day = index + 1;
+          final day = validDays[index];
           final dateTime = DateTime(date.year, date.month, day);
           final label = getShortDayLabel(dateTime.weekday);
 
@@ -34,7 +40,7 @@ class DateSelector extends StatelessWidget {
             child: Container(
               width: 50,
               decoration: BoxDecoration(
-                color: isSelected ? Color(0xFF1D2130) : Colors.grey[300],
+                color: isSelected ? const Color(0xFF1D2130) : Colors.grey[300],
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Column(

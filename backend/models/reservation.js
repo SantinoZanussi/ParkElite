@@ -19,15 +19,34 @@ const reservationSchema = new mongoose.Schema({
     type: Date,
     required: true
   },
+  reservationDate: {
+    type: Date,
+    required: true
+  },
   status: {
     type: String,
     enum: ['pendiente', 'confirmado', 'cancelado', 'completado'],
-    default: 'pendiente'
+    default: 'confirmado'
   },
   createdAt: {
     type: Date,
     default: Date.now
   }
+});
+
+// Índices para optimización
+reservationSchema.index({ userId: 1, reservationDate: 1 });
+reservationSchema.index({ parkingSpotId: 1, reservationDate: 1 });
+reservationSchema.index({ startTime: 1, endTime: 1 });
+
+// Validación personalizada: no permitir reservas los domingos
+reservationSchema.pre('save', function(next) {
+  const reservationDay = new Date(this.reservationDate).getDay();
+  if (reservationDay === 0) { // 0 = Domingo
+    const error = new Error('No se pueden hacer reservas los domingos');
+    return next(error);
+  }
+  next();
 });
 
 module.exports = mongoose.model('Reservation', reservationSchema);

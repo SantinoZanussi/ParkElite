@@ -137,7 +137,7 @@ class ApiService {
 
   // crear una reserva
   Future<Map<String, dynamic>> createReservation(
-    String parkingSpotId, 
+    DateTime reservationDate,
     DateTime startTime, 
     DateTime endTime
   ) async {
@@ -154,7 +154,7 @@ class ApiService {
           'Content-Type': 'application/json'
         },
         body: jsonEncode({
-          'parkingSpotId': parkingSpotId,
+          'reservationDate': reservationDate.toIso8601String(),
           'startTime': startTime.toIso8601String(),
           'endTime': endTime.toIso8601String(),
         }),
@@ -163,14 +163,113 @@ class ApiService {
       if (response.statusCode == 201) {
         return jsonDecode(response.body);
       } else {
-        throw Exception('Error al crear la reserva: ${response.statusCode}');
+        final errorData = jsonDecode(response.body);
+        throw Exception(errorData['message'] ?? 'Error al crear la reserva');
       }
     } catch (e) {
       print('Error de conexión en createReservation: $e');
       throw Exception('Error de conexión: $e');
     }
+}
+
+  // Obtener espacios disponibles
+  Future<List<dynamic>> getAvailableSpots(
+    DateTime date,
+    DateTime startTime,
+    DateTime endTime
+  ) async {
+    try {
+      final internet = await ConnectivityService.hasInternet();
+      if (!internet) { throw Exception('❎ No hay conexión a internet.'); }
+
+      final token = await getToken();
+      
+      final queryParams = {
+        'date': date.toIso8601String(),
+        'startTime': startTime.toIso8601String(),
+        'endTime': endTime.toIso8601String(),
+      };
+      
+      final uri = Uri.parse('$baseUrl/reservas/available-spots').replace(queryParameters: queryParams);
+      
+      final response = await http.get(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json'
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception('Error al obtener espacios disponibles: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error de conexión en getAvailableSpots: $e');
+      throw Exception('Error de conexión: $e');
+    }
   }
 
+  // Cancelar reserva
+  Future<void> cancelReservation(String reservationId) async {
+    try {
+      final internet = await ConnectivityService.hasInternet();
+      if (!internet) { throw Exception('❎ No hay conexión a internet.'); }
+
+      final token = await getToken();
+      
+      final response = await http.delete(
+        Uri.parse('$baseUrl/reservas/$reservationId'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json'
+        },
+      );
+
+      if (response.statusCode != 200) {
+        final errorData = jsonDecode(response.body);
+        throw Exception(errorData['message'] ?? 'Error al cancelar la reserva');
+      }
+    } catch (e) {
+      print('Error de conexión en cancelReservation: $e');
+      throw Exception('Error de conexión: $e');
+    }
+  }
+
+  // Obtener estadísticas de ocupación
+  Future<List<dynamic>> getOccupancyStats(DateTime date) async {
+    try {
+      final internet = await ConnectivityService.hasInternet();
+      if (!internet) { throw Exception('❎ No hay conexión a internet.'); }
+
+      final token = await getToken();
+      
+      final queryParams = {
+        'date': date.toIso8601String(),
+      };
+      
+      final uri = Uri.parse('$baseUrl/reservas/occupancy-stats').replace(queryParameters: queryParams);
+      
+      final response = await http.get(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json'
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception('Error al obtener estadísticas: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error de conexión en getOccupancyStats: $e');
+      throw Exception('Error de conexión: $e');
+    }
+  }
+  
   //unlogout
   Future<void> unlogout() async {
     try {
