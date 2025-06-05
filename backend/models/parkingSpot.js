@@ -11,10 +11,6 @@ const parkingSpotSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  location: {
-    type: String,
-    required: true
-  },
   isActive: {
     type: Boolean,
     default: true

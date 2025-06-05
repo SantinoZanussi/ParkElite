@@ -12,27 +12,22 @@ const seedParkingSpots = async () => {
     await ParkingSpot.deleteMany({});
     console.log('Espacios existentes eliminados');
 
-    // Crear los 4 espacios de estacionamiento
-    const parkingSpots = [
+    const parkingSpots = [ // Espacios del estacionamiento
       {
         spotNumber: 1,
-        name: 'Espacio A1',
-        location: 'Nivel 1, Sección A'
+        name: 'Espacio 1',
       },
       {
         spotNumber: 2,
-        name: 'Espacio A2',
-        location: 'Nivel 1, Sección A'
+        name: 'Espacio 2',
       },
       {
         spotNumber: 3,
-        name: 'Espacio B1',
-        location: 'Nivel 1, Sección B'
+        name: 'Espacio 3',
       },
       {
         spotNumber: 4,
-        name: 'Espacio B2',
-        location: 'Nivel 1, Sección B'
+        name: 'Espacio 4',
       }
     ];
 
