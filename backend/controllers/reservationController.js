@@ -1,7 +1,7 @@
 const Reservation = require('../models/reservation');
 const ParkingSpot = require('../models/parkingSpot');
+const User = require('../models/user');
 
-// Obtener todas las reservas de un usuario
 exports.getUserReservations = async (req, res) => {
   try {
     const reservations = await Reservation.find({ 
@@ -18,12 +18,14 @@ exports.getUserReservations = async (req, res) => {
   }
 };
 
-// Crear nueva reserva
 exports.createReservation = async (req, res) => {
   const { startTime, endTime, reservationDate } = req.body;
 
   try {
-    // Validar que no sea domingo
+    const userInfo = await User.findOne({ userId: req.user.id });
+    if (!userInfo) { return res.status(404).json({ message: 'Usuario no encontrado' });}
+    const userInfo_uid = userInfo.uid_rfid;
+
     const dateObj = new Date(reservationDate);
     if (dateObj.getDay() === 0) {
       return res.status(400).json({ 
@@ -31,9 +33,10 @@ exports.createReservation = async (req, res) => {
       });
     }
 
-    // Verificar si el usuario ya tiene una reserva para ese día
+    // si el usuario ya tiene una reserva para ese día
     const existingReservation = await Reservation.findOne({
       userId: req.user.id,
+      uid_rfid: userInfo_uid,
       reservationDate: {
         $gte: new Date(dateObj.setHours(0, 0, 0, 0)),
         $lt: new Date(dateObj.setHours(23, 59, 59, 999))
@@ -47,7 +50,6 @@ exports.createReservation = async (req, res) => {
       });
     }
 
-    // Buscar un estacionamiento disponible
     const availableSpot = await findAvailableSpot(reservationDate, startTime, endTime);
     
     if (!availableSpot) {
@@ -58,6 +60,7 @@ exports.createReservation = async (req, res) => {
 
     const reservation = new Reservation({
       userId: req.user.id,
+      uid_rfid: userInfo_uid,
       parkingSpotId: availableSpot._id,
       startTime: new Date(startTime),
       endTime: new Date(endTime),
@@ -65,8 +68,6 @@ exports.createReservation = async (req, res) => {
     });
 
     await reservation.save();
-    
-    // Populate la respuesta
     await reservation.populate('parkingSpotId');
     
     res.status(201).json(reservation);
@@ -79,12 +80,10 @@ exports.createReservation = async (req, res) => {
   }
 };
 
-// Obtener espacios disponibles para una fecha y horario específico
 exports.getAvailableSpots = async (req, res) => {
   const { date, startTime, endTime } = req.query;
 
   try {
-    // Validar que no sea domingo
     const dateObj = new Date(date);
     if (dateObj.getDay() === 0) {
       return res.json([]);
@@ -112,7 +111,6 @@ exports.cancelReservation = async (req, res) => {
       return res.status(404).json({ message: 'Reserva no encontrada' });
     }
 
-    // Solo se pueden cancelar reservas futuras
     const now = new Date();
     if (reservation.startTime <= now) {
       return res.status(400).json({ 
@@ -130,7 +128,6 @@ exports.cancelReservation = async (req, res) => {
   }
 };
 
-// Obtener estadísticas de ocupación
 exports.getOccupancyStats = async (req, res) => {
   const { date } = req.query;
 
@@ -139,7 +136,7 @@ exports.getOccupancyStats = async (req, res) => {
     const startOfDay = new Date(dateObj.setHours(0, 0, 0, 0));
     const endOfDay = new Date(dateObj.setHours(23, 59, 59, 999));
 
-    // Obtener todas las reservas del día
+    // obtener todas las reservas del día
     const reservations = await Reservation.find({
       reservationDate: {
         $gte: startOfDay,
@@ -148,9 +145,9 @@ exports.getOccupancyStats = async (req, res) => {
       status: { $ne: 'cancelado' }
     }).populate('parkingSpotId');
 
-    // Calcular estadísticas por cada hora del día
+    // calcular estadísticas por cada hora del día
     const hourlyStats = [];
-    for (let hour = 6; hour < 22; hour++) { // De 6 AM a 10 PM
+    for (let hour = 6; hour < 22; hour++) { // 6 AM a 10 PM
       const hourStart = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), hour, 0, 0);
       const hourEnd = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), hour + 1, 0, 0);
       
@@ -173,16 +170,15 @@ exports.getOccupancyStats = async (req, res) => {
   }
 };
 
-// Función auxiliar: Buscar espacio disponible
 async function findAvailableSpot(date, startTime, endTime) {
-  // Obtener todos los espacios
+  // obtener todos los espacios
   const allSpots = await ParkingSpot.find({ isActive: true }).sort({ spotNumber: 1 });
   
   const startDate = new Date(startTime);
   const endDate = new Date(endTime);
   const reservationDate = new Date(date);
 
-  // Para cada espacio, verificar si está disponible
+  // para cada espacio, verificar si está disponible
   for (const spot of allSpots) {
     const isAvailable = await checkSpotAvailability(spot._id, reservationDate, startDate, endDate);
     if (isAvailable) {
@@ -193,7 +189,6 @@ async function findAvailableSpot(date, startTime, endTime) {
   return null;
 }
 
-// Función auxiliar: Verificar disponibilidad de un espacio específico
 async function checkSpotAvailability(spotId, date, startTime, endTime) {
   const dateObj = new Date(date);
   const startOfDay = new Date(dateObj.setHours(0, 0, 0, 0));
@@ -217,7 +212,6 @@ async function checkSpotAvailability(spotId, date, startTime, endTime) {
   return conflictingReservations === 0;
 }
 
-// Función auxiliar: Obtener espacios disponibles para un horario
 async function getAvailableSpotsForTime(date, startTime, endTime) {
   const allSpots = await ParkingSpot.find({ isActive: true }).sort({ spotNumber: 1 });
   const availableSpots = [];

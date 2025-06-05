@@ -136,43 +136,47 @@ class ApiService {
   }
 
   // crear una reserva
-  Future<Map<String, dynamic>> createReservation(
-    DateTime reservationDate,
-    DateTime startTime, 
-    DateTime endTime
-  ) async {
-    try {
-      final internet = await ConnectivityService.hasInternet();
-      if (!internet) { throw Exception('❎ No hay conexión a internet.'); }
+Future<Map<String, dynamic>> createReservation(
+  DateTime reservationDate,
+  DateTime startTime, 
+  DateTime endTime
+) async {
+  try {
+    final internet = await ConnectivityService.hasInternet();
+    if (!internet) { throw Exception('❎ No hay conexión a internet.'); }
 
-      final token = await getToken();
-      
-      final response = await http.post(
-        Uri.parse('$baseUrl/reservas'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json'
-        },
-        body: jsonEncode({
-          'reservationDate': reservationDate.toIso8601String(),
-          'startTime': startTime.toIso8601String(),
-          'endTime': endTime.toIso8601String(),
-        }),
-      );
+    final token = await getToken();
 
-      if (response.statusCode == 201) {
-        return jsonDecode(response.body);
-      } else {
-        final errorData = jsonDecode(response.body);
-        throw Exception(errorData['message'] ?? 'Error al crear la reserva');
-      }
-    } catch (e) {
-      print('Error de conexión en createReservation: $e');
-      throw Exception('Error de conexión: $e');
+    // Convertir a UTC
+    final startUtcIso = startTime.toUtc().toIso8601String();
+    final endUtcIso = endTime.toUtc().toIso8601String();
+    final dateIso = reservationDate.toUtc().toIso8601String();
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/reservas'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json'
+      },
+      body: jsonEncode({
+        'reservationDate': dateIso,
+        'startTime': startUtcIso,
+        'endTime': endUtcIso,
+      }),
+    );
+
+    if (response.statusCode == 201) {
+      return jsonDecode(response.body);
+    } else {
+      final errorData = jsonDecode(response.body);
+      throw Exception(errorData['message'] ?? 'Error al crear la reserva');
     }
+  } catch (e) {
+    print('Error de conexión en createReservation: $e');
+    throw Exception('Error de conexión: $e');
+  }
 }
 
-  // Obtener espacios disponibles
   Future<List<dynamic>> getAvailableSpots(
     DateTime date,
     DateTime startTime,
@@ -211,7 +215,6 @@ class ApiService {
     }
   }
 
-  // Cancelar reserva
   Future<void> cancelReservation(String reservationId) async {
     try {
       final internet = await ConnectivityService.hasInternet();
@@ -237,7 +240,6 @@ class ApiService {
     }
   }
 
-  // Obtener estadísticas de ocupación
   Future<List<dynamic>> getOccupancyStats(DateTime date) async {
     try {
       final internet = await ConnectivityService.hasInternet();

@@ -16,14 +16,54 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
   int selectedDay = DateTime.now().day;
   bool isLoading = false;
   List<dynamic> userReservations = [];
+  List<dynamic> occupancyStats = [];
   final ApiService apiService = ApiService();
 
-  // Máximo: mes actual + 1
+  // mes actual + 1
   DateTime get maxDate => DateTime(currentDate.year, DateTime.now().month + 2);
 
   @override
   void initState() {
     super.initState();
+    _loadReservations();
+    _loadOccupancyStats();
+  }
+
+  Future<void> _loadReservations() async {
+    setState(() {
+      isLoading = true;
+    });
+    try {
+      final reservations = await apiService.getUserReservations();
+      setState(() {
+        userReservations = reservations;
+        isLoading = false;
+      });
+    } catch (e) {
+      print('Error al cargar reservas: $e');
+      setState(() {
+        userReservations = [];
+        isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al cargar las reservas: $e')),
+      );
+    }
+  }
+
+  Future<void> _loadOccupancyStats() async {
+    try {
+      final selectedDate = DateTime(currentDate.year, currentDate.month, selectedDay);
+      final stats = await apiService.getOccupancyStats(selectedDate);
+      setState(() {
+        occupancyStats = stats;
+      });
+    } catch (e) {
+      print('Error al cargar estadísticas: $e');
+      setState(() {
+        occupancyStats = [];
+      });
+    }
   }
 
   void nextMonth() {
@@ -33,6 +73,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
         currentDate = next;
         selectedDay = 1;
       });
+      _loadOccupancyStats();
     }
   }
 
@@ -43,6 +84,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
         currentDate = DateTime(currentDate.year, currentDate.month - 1);
         selectedDay = 1;
       });
+      _loadOccupancyStats();
     }
   }
 
@@ -50,6 +92,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     setState(() {
       selectedDay = day;
     });
+    _loadOccupancyStats();
   }
 
   String getMonthName(int month) {
@@ -59,7 +102,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     ];
     return names[month];
   }
-  
+
   @override
   Widget build(BuildContext context) {
     final monthText = "${getMonthName(currentDate.month)} ${currentDate.year}";
@@ -93,7 +136,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Selector de fecha existente
+                        // fechas
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -115,7 +158,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                         ),
                         const SizedBox(height: 20),
 
-                        // Mostrar mensaje si es domingo
+                        // domingo
                         if (DateTime(currentDate.year, currentDate.month, selectedDay).weekday == DateTime.sunday)
                           const Center(
                             child: Padding(
@@ -135,7 +178,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                     ),
                   ),
           ),
-          const BottomNavBar(currentPage: 'reservas'),
+          BottomNavBar(currentPage: 'reservas'),
         ],
       ),
     );
@@ -143,75 +186,208 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
 
   List<Widget> _generateReservationCards() {
     final List<Widget> cards = [];
-    for (int hour = 7; hour <= 20; hour++) {
-      final availability = _calculateAvailability(hour);
+    
+    // tarjetas para cada hora del día (6 AM a 10 PM)
+    for (int hour = 6; hour < 22; hour++) {
+      final availability = _getAvailabilityForHour(hour);
+      final isAvailable = (availability['available'] ?? 0) > 0;
+      final hasUserReservation = _hasUserReservationAtHour(hour);
 
       cards.add(
         GestureDetector(
-          onTap: (availability['available'] ?? 0) > 0 ? () => _showDurationDialog(hour) : null,
-          child: ClassCard(
-            time: '$hour:00',
-            title: 'Disponibilidad: ${availability['occupied']}/${availability['total']}',
-            room: (availability['available'] ?? 0) > 0 ? 'Lugares disponibles' : 'Sin lugares disponibles',
+          onTap: isAvailable && !hasUserReservation ? () => _showDurationDialog(hour) : null,
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            child: Card(
+              color: hasUserReservation ? Colors.blue[50] : (isAvailable ? Colors.white : Colors.grey[200]),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(
+                  color: hasUserReservation ? Colors.blue : Colors.transparent,
+                  width: hasUserReservation ? 2 : 0,
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // horario
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: hasUserReservation ? Colors.blue : const Color(0xFF1D2130),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '${hour.toString().padLeft(2, '0')}:00',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        if (hasUserReservation) ...[
+                          const SizedBox(width: 10),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.blue,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text(
+                              'TU RESERVA',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 7),
+                    // disponibilidad
+                    Text(
+                      hasUserReservation 
+                          ? 'Tu reserva confirmada' 
+                          : 'Disponibilidad: ${availability['occupied']}/${availability['total']}',
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      hasUserReservation
+                          ? _getUserReservationInfo(hour)
+                          : (isAvailable ? 'Lugares disponibles' : 'Sin lugares disponibles'),
+                      style: TextStyle(
+                        color: hasUserReservation ? Colors.blue[700] : Colors.grey,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 7),
+                    // barra de progreso
+                    LinearProgressIndicator(
+                      value: (availability['total'] ?? 0) > 0 ? (availability['occupied'] ?? 0) / (availability['total'] ?? 1) : 0,
+                      backgroundColor: Colors.grey[300],
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        hasUserReservation ? Colors.blue : (isAvailable ? Colors.green : Colors.red),
+                      ),
+                    ),
+                    // cancelar reserva
+                    if (hasUserReservation) ...[
+                      const SizedBox(height: 10),
+                      ElevatedButton(
+                        onPressed: () => _cancelUserReservation(hour),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                        ),
+                        child: const Text('Cancelar Reserva'),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
       );
-      cards.add(const SizedBox(height: 10));
     }
     return cards;
   }
 
-  Map<String, int> _calculateAvailability(int hour) {
-    final DateTime reservationDate = DateTime(
-      currentDate.year,
-      currentDate.month,
-      selectedDay,
-      hour,
+  Map<String, int> _getAvailabilityForHour(int hour) {
+    // estadísticas de ocupación
+    final stat = occupancyStats.firstWhere(
+      (stat) => stat['hour'] == hour,
+      orElse: () => {'occupied': 0, 'available': 4, 'total': 4},
     );
-
-    final DateTime endTime = reservationDate.add(const Duration(hours: 1));
-
-    final List<int> occupiedSpots = userReservations
-        .where((reservation) {
-          final DateTime startTime = DateTime.parse(reservation['startTime']);
-          final DateTime reservationEndTime = DateTime.parse(reservation['endTime']);
-          return (reservationDate.isBefore(reservationEndTime) &&
-              endTime.isAfter(startTime));
-        })
-        .map((reservation) => int.parse(reservation['parkingSpotId']['name'].split(' ')[1]))
-        .toList();
-
-    const int totalSpots = 4;
-    final int occupied = occupiedSpots.length;
-    final int available = totalSpots - occupied;
-
+    
     return {
-      'total': totalSpots,
-      'occupied': occupied,
-      'available': available,
+      'occupied': stat['occupied'] ?? 0,
+      'available': stat['available'] ?? 4,
+      'total': 4,
     };
+  }
+
+  bool _hasUserReservationAtHour(int hour) {
+    final selectedDate = DateTime(currentDate.year, currentDate.month, selectedDay);
+    
+    return userReservations.any((reservation) {
+      final reservationDate = DateTime.parse(reservation['reservationDate']).toLocal();
+      final startTime = DateTime.parse(reservation['startTime']).toLocal();
+      final endTime = DateTime.parse(reservation['endTime']).toLocal();
+      
+      // verificar si es el mismo día
+      if (reservationDate.year != selectedDate.year ||
+          reservationDate.month != selectedDate.month ||
+          reservationDate.day != selectedDate.day) {
+        return false;
+      }
+      
+      // verificar si la hora está dentro del rango de la reserva
+      final hourDateTime = DateTime(selectedDate.year, selectedDate.month, selectedDate.day, hour);
+      return hourDateTime.isAfter(startTime.subtract(const Duration(minutes: 1))) &&
+             hourDateTime.isBefore(endTime);
+    });
+  }
+
+  String _getUserReservationInfo(int hour) {
+    final selectedDate = DateTime(currentDate.year, currentDate.month, selectedDay);
+    
+    final reservation = userReservations.firstWhere((reservation) {
+      final reservationDate = DateTime.parse(reservation['reservationDate']).toLocal();
+      final startTime = DateTime.parse(reservation['startTime']).toLocal();
+      final endTime = DateTime.parse(reservation['endTime']).toLocal();
+      
+      if (reservationDate.year != selectedDate.year ||
+          reservationDate.month != selectedDate.month ||
+          reservationDate.day != selectedDate.day) {
+        return false;
+      }
+      
+      final hourDateTime = DateTime(selectedDate.year, selectedDate.month, selectedDate.day, hour);
+      return hourDateTime.isAfter(startTime.subtract(const Duration(minutes: 1))) &&
+             hourDateTime.isBefore(endTime);
+    });
+
+    final startTime = DateTime.parse(reservation['startTime']).toLocal();
+    final endTime = DateTime.parse(reservation['endTime']).toLocal();
+    final spotName = reservation['parkingSpotId']['name'];
+    
+    return '$spotName - ${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')} a ${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}';
   }
 
   Future<void> _showDurationDialog(int hour) async {
     final durations = {
       '1 hora': const Duration(hours: 1),
+      '2 horas': const Duration(hours: 2),
       '3 horas': const Duration(hours: 3),
-      '1 día': const Duration(days: 1),
+      '4 horas': const Duration(hours: 4),
+      '6 horas': const Duration(hours: 6),
+      '8 horas': const Duration(hours: 8),
     };
 
     final selectedDuration = await showDialog<Duration>(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Selecciona la duración de la reserva'),
+          title: const Text('Selecciona la duración'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: durations.keys.map((key) {
-              return ElevatedButton(
-                onPressed: () {
-                  Navigator.of(context).pop(durations[key]);
-                },
-                child: Text(key),
+              return Container(
+                width: double.infinity,
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pop(durations[key]);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1D2130),
+                    foregroundColor: Colors.white,
+                  ),
+                  child: Text(key),
+                ),
               );
             }).toList(),
           ),
@@ -226,54 +402,110 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
 
   Future<void> _handleReservation(int hour, Duration duration) async {
     try {
-      final DateTime reservationDate = DateTime(
-        currentDate.year,
-        currentDate.month,
-        selectedDay,
-        hour,
-      );
+      setState(() {
+        isLoading = true;
+      });
 
-      final DateTime endTime = reservationDate.add(duration);
+      final reservationDate = DateTime(currentDate.year, currentDate.month, selectedDay);
+      final startTime = DateTime(reservationDate.year, reservationDate.month, reservationDate.day, hour, 0, 0);
+      final endTime = startTime.add(duration);
 
-      // Verificar disponibilidad de lugares
-      final List<int> occupiedSpots = userReservations
-          .where((reservation) {
-            final DateTime startTime = DateTime.parse(reservation['startTime']);
-            final DateTime reservationEndTime = DateTime.parse(reservation['endTime']);
-            return (reservationDate.isBefore(reservationEndTime) &&
-                endTime.isAfter(startTime));
-          })
-          .map((reservation) => int.parse(reservation['parkingSpotId']['name'].split(' ')[1]))
-          .toList();
-
-      int availableSpot = -1;
-      for (int i = 1; i <= 4; i++) {
-        if (!occupiedSpots.contains(i)) {
-          availableSpot = i;
-          break;
-        }
-      }
-
-      if (availableSpot == -1) {
+      // verificar que no exceda las 22:00
+      if (endTime.hour > 22 || endTime.hour < 06) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No hay lugares disponibles para este horario')),
+          const SnackBar(content: Text('La reserva no puede extenderse más allá de las 22:00')),
         );
+        setState(() {
+          isLoading = false;
+        });
         return;
       }
 
-      // Crear reserva
-      await apiService.createReservation(
-        availableSpot.toString(),
-        reservationDate,
-        endTime,
+      await apiService.createReservation(reservationDate, startTime, endTime);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Reserva creada exitosamente')),
       );
 
-      // Recargar las reservas
-      //await _loadReservations();
+      await _loadReservations();
+      await _loadOccupancyStats();
+      
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al realizar la reserva: $e')),
+        SnackBar(content: Text('Error: $e')),
       );
+    } finally {
+      setState(() {
+        isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _cancelUserReservation(int hour) async {
+    final selectedDate = DateTime(currentDate.year, currentDate.month, selectedDay);
+    
+    // encontrar la reserva del usuario para esa hora
+    final reservation = userReservations.firstWhere((reservation) {
+      final reservationDate = DateTime.parse(reservation['reservationDate']);
+      final startTime = DateTime.parse(reservation['startTime']);
+      final endTime = DateTime.parse(reservation['endTime']);
+      
+      if (reservationDate.year != selectedDate.year ||
+          reservationDate.month != selectedDate.month ||
+          reservationDate.day != selectedDate.day) {
+        return false;
+      }
+      
+      final hourDateTime = DateTime(selectedDate.year, selectedDate.month, selectedDate.day, hour);
+      return hourDateTime.isAfter(startTime.subtract(const Duration(minutes: 1))) &&
+             hourDateTime.isBefore(endTime);
+    });
+
+    final shouldCancel = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Cancelar Reserva'),
+          content: const Text('¿Estás seguro de que quieres cancelar esta reserva?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('No'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Sí, Cancelar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldCancel == true) {
+      try {
+        setState(() {
+          isLoading = true;
+        });
+
+        await apiService.cancelReservation(reservation['_id']);
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Reserva cancelada exitosamente')),
+        );
+
+        await _loadReservations();
+        await _loadOccupancyStats();
+        
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al cancelar: $e')),
+        );
+      } finally {
+        setState(() {
+          isLoading = false;
+        });
+      }
     }
   }
 }
