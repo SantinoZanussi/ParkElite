@@ -6,6 +6,12 @@ const reservationSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  code: {
+    type: Number,
+    required: true,
+    unique: true,
+    parse: true
+  },
   uid_rfid: {
     type: String,
     required: true

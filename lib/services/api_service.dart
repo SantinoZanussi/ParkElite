@@ -10,7 +10,7 @@ class ApiService {
   final String localNetworkIPEscuela = "190.139.136.234";
   late final String baseUrl = Platform.isAndroid 
       ? 'http://10.0.2.2:5000/api' // Para emulador Android (10.0.2.2 apunta a localhost de la máquina host)
-      : 'http://$localNetworkIP:5000/api'; // Para iOS o dispositivos físicos, ajustar según necesidad
+      : 'http://$localNetworkIPEscuela:5000/api'; // Para iOS o dispositivos físicos, ajustar según necesidad
       
   final storage = FlutterSecureStorage();
   // token
@@ -313,6 +313,33 @@ Future<Map<String, dynamic>> checkServerStatus() async {
     throw Exception('Error de conexión: $e');
   }
 
+}
+
+Future<Map<String, dynamic>> getCode() async {
+    try {
+      final internet = await ConnectivityService.hasInternet();
+      if (!internet) { throw Exception('❎ No hay conexión a internet.'); }
+
+      final token = await getToken();
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/auth/getUser'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json'
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['code'];
+      } else {
+        throw Exception('Error al obtener las reservas: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error de conexión en getUser: $e');
+      throw Exception('Error de conexión: $e');
+    }
 }
 
 }

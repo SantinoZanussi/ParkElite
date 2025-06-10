@@ -57,11 +57,11 @@ class BottomNavBar extends StatelessWidget {
                         ),
                         const SizedBox(width: 60), // Space for center button
                         GestureDetector(
-                          onTap: () => navigateTo(context, 'desarrolladores'),
+                          onTap: () => navigateTo(context, 'code'),
                           child: Icon(
-                            Icons.people_outlined,
+                            Icons.pin,
                             color:
-                                currentPage == 'desarrolladores'
+                                currentPage == 'code'
                                     ? Colors.white
                                     : Colors.white.withOpacity(0.5),
                             size: 24,

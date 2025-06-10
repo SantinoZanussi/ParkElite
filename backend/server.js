@@ -25,6 +25,8 @@ app.all('/api/*', (req, res) => {
 });
 */
 
+require('./scripts/updateCodes');
+
 //* Iniciar servidor
 connectDB().then(() => {
     app.listen(PORT, '0.0.0.0', () => {

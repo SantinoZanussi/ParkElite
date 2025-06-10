@@ -6,6 +6,7 @@ import '../screens/profile.dart';
 import '../screens/notifications.dart';
 import '../screens/reservations.dart';
 import '../screens/config.dart';
+import '../screens/code.dart';
 
 void navigateTo(BuildContext context, String screenName) {
   if (screenName == "home") {
@@ -43,7 +44,12 @@ void navigateTo(BuildContext context, String screenName) {
     ScaffoldMessenger.of(
       context,
     );
-  } else if (["desarrolladores", "contacto", "tarifas"].contains(screenName)) {
+  } else if (screenName == "code") {
+    Navigator.push(context, MaterialPageRoute(builder: (context) => const CodeScreen()));
+    ScaffoldMessenger.of(
+      context,
+    );
+  } else if (["desarrolladores", "contacto", "tarifas", ""].contains(screenName)) {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text('Navegando a: $screenName (Pantalla no implementada)')));

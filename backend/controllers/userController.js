@@ -42,7 +42,7 @@ exports.getUser = async (req, res) => {
 exports.createUser = async (req, res) => {
     let { name, last_name, uid_rfid, birthday, home_address, phone_number, email, password  } = req.body;
     let user_id = new mongoose.Types.ObjectId();
-
+    let code_new = await createCode();
     // Cambiar el formato de la fecha de nacimiento
 
     const parsedBirthday = moment(birthday, 'DD/MM/YYYY', true);
@@ -63,15 +63,26 @@ exports.createUser = async (req, res) => {
             phone_number: phone_number,
             email: email,
             password: password,
+            code: code_new,
         });
 
         await user.save();
 
-        const token = jwt.sign({ id: user.userId, email: email }, SECRET_KEY, { expiresIn: '90d' });
+        const token = jwt.sign({ id: user.userId, email: email, uid: uid_rfid, code: code_new }, SECRET_KEY, { expiresIn: '90d' });
         
         res.status(201).json({ data: user, token: token });
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: 'Error del servidor' });
     }
+}
+
+async function createCode() {
+    const code = Math.floor(100000 + Math.random() * 900000);
+    const existingUser = await User.findOne({ code: code });
+    if (existingUser) {
+        return createCode();
+    }
+
+    return code;
 }
