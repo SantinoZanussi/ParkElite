@@ -315,7 +315,7 @@ Future<Map<String, dynamic>> checkServerStatus() async {
 
 }
 
-Future<Map<String, dynamic>> getCode() async {
+Future<int> getCode() async {
     try {
       final internet = await ConnectivityService.hasInternet();
       if (!internet) { throw Exception('❎ No hay conexión a internet.'); }
@@ -337,7 +337,7 @@ Future<Map<String, dynamic>> getCode() async {
         throw Exception('Error al obtener las reservas: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error de conexión en getUser: $e');
+      print('Error de conexión en getCode: $e');
       throw Exception('Error de conexión: $e');
     }
 }

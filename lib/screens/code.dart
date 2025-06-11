@@ -25,11 +25,11 @@ class _CodeScreen extends State<CodeScreen> {
 
   Future<void> loadUserCode() async {
     try {
-      final code = await api.getToken();
-      if (code == null) {
+      final data = await api.getCode();
+      if (data == null) {
         throw Exception('Respuesta inválida del servidor');
       }
-      codigo = code;
+      codigo = data.toString();
       setState(() {
         isLoading = false;
       });
@@ -98,13 +98,82 @@ class _CodeScreen extends State<CodeScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Code Screen'),
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Column(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20.0, vertical: 20.0),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Código de usuario',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 100.0),
+                    child: Center(
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 32.0),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 32.0,
+                          vertical: 24.0,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20.0),
+                          border: Border.all(
+                            color: const Color(0xFFE0E0E0),
+                            width: 2.0,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.08),
+                              blurRadius: 12.0,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              'Tu código es:',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Color(0xFF666666),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              codigo ?? 'No disponible',
+                              style: const TextStyle(
+                                fontSize: 36,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF333333),
+                                letterSpacing: 4.0,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          BottomNavBar(currentPage: 'code'),
+        ],
       ),
-      body: Center(
-        child: Text('Code Screen Content' + codigo.toString()),
-      ),
-      bottomNavigationBar: const BottomNavBar(currentPage: "code"),
     );
   }
 }
