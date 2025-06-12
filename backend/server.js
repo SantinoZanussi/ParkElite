@@ -2,6 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const connectDB = require('./config/db');
+const os = require('os');
 require('dotenv').config();
 
 const app = express();
@@ -28,16 +29,35 @@ app.all('/api/*', (req, res) => {
 require('./scripts/updateCodes');
 
 //* Iniciar servidor
+
+function getLocalIPv4() {
+  const nets = os.networkInterfaces();
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name]) {
+      // Solo IPv4 y no internas (loopback)
+      if (net.family === 'IPv4' && !net.internal) {
+        return net.address;
+      }
+    }
+  }
+  return '0.0.0.0';
+}
+
 connectDB().then(() => {
-    app.listen(PORT, '0.0.0.0', () => {
-        console.log(`Servidor corriendo en http://localhost:${PORT}`);
-    });
+  const host = '0.0.0.0';
+  app.listen(PORT, host, () => {
+    const localIP = getLocalIPv4();
+    console.log(` → Servidor corriendo en:`);
+    console.log(`    • http://localhost:${PORT}`);
+    console.log(`    • http://${localIP}:${PORT}`);
+  });
 }).catch(err => {
-    console.error("Error al conectar a la base de datos:", err);
+  console.error("Error al conectar a la base de datos:", err);
 });
+
 
 /* .env info
 MONGO_URL = mongodb+srv://DBUser:porriki319@cluster0.tscwgzd.mongodb.net/
-PORT = 5000
+PORT = 3000
 JWT_SECRET = 1234567890
 */

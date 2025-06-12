@@ -48,7 +48,6 @@ class ApiService {
   Future<Map<String, dynamic>> register(
     String name,
     String last_name,
-    String uid,
     String email, 
     String password,
     String phone_number,
@@ -59,12 +58,10 @@ class ApiService {
       final internet = await ConnectivityService.hasInternet();
       if (!internet) { throw Exception('❎ No hay conexión a internet.'); }
 
-      final cleanUid = uid.replaceAll(':', '').toUpperCase();
-
       final response = await http.post(
         Uri.parse('$baseUrl/auth/register'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'name': name, 'last_name': last_name, 'uid_rfid': cleanUid, 'email': email, 'password': password, 'phone_number': phone_number, 'birthday': birthday, 'home_address': home_address,}),
+        body: jsonEncode({'name': name, 'last_name': last_name, 'email': email, 'password': password, 'phone_number': phone_number, 'birthday': birthday, 'home_address': home_address,}),
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {

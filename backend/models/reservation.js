@@ -12,10 +12,6 @@ const reservationSchema = new mongoose.Schema({
     unique: true,
     parse: true
   },
-  uid_rfid: {
-    type: String,
-    required: true
-  },
   parkingSpotId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'ParkingSpot',

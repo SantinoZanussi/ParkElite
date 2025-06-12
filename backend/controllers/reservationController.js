@@ -24,7 +24,6 @@ exports.createReservation = async (req, res) => {
   try {
     const userInfo = await User.findOne({ userId: req.user.id });
     if (!userInfo) { return res.status(404).json({ message: 'Usuario no encontrado' });}
-    const userInfo_uid = userInfo.uid_rfid;
 
     const dateObj = new Date(reservationDate);
     if (dateObj.getDay() === 0) {
@@ -37,7 +36,6 @@ exports.createReservation = async (req, res) => {
     const existingReservation = await Reservation.findOne({
       userId: req.user.id,
       code: req.user.code,
-      uid_rfid: userInfo_uid,
       reservationDate: {
         $gte: new Date(dateObj.setHours(0, 0, 0, 0)),
         $lt: new Date(dateObj.setHours(23, 59, 59, 999))
@@ -62,7 +60,6 @@ exports.createReservation = async (req, res) => {
     const reservation = new Reservation({
       userId: req.user.id,
       code: req.user.code,
-      uid_rfid: userInfo_uid,
       parkingSpotId: availableSpot._id,
       startTime: new Date(startTime),
       endTime: new Date(endTime),
@@ -171,6 +168,23 @@ exports.getOccupancyStats = async (req, res) => {
     res.status(500).json({ message: 'Error del servidor' });
   }
 };
+
+exports.checkCodeUser = async (req, res) => {
+  const user_code = req.body.code; 
+
+  try {
+    const checkCode = await Reservation.findOne({ code: user_code });
+
+    if (!checkCode) {
+      return res.status(404).json({ allowed: false, message: 'Reserva no encontrada' });
+    } else {
+      return res.json({ allowed: true, spotId: checkCode.parkingSpotId });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error del servidor' });
+  }
+}
 
 async function findAvailableSpot(date, startTime, endTime) {
   // obtener todos los espacios

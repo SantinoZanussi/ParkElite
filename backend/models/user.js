@@ -6,10 +6,6 @@ const userSchema = new mongoose.Schema({
         ref: 'User',
         required: true
     },
-    uid_rfid: {
-        type: String,
-        required: true
-    },
     name: {
         type: String,
         required: true

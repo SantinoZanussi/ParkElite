@@ -40,7 +40,7 @@ exports.getUser = async (req, res) => {
 
 // register
 exports.createUser = async (req, res) => {
-    let { name, last_name, uid_rfid, birthday, home_address, phone_number, email, password  } = req.body;
+    let { name, last_name, birthday, home_address, phone_number, email, password  } = req.body;
     let user_id = new mongoose.Types.ObjectId();
     let code_new = await createCode();
     // Cambiar el formato de la fecha de nacimiento
@@ -55,7 +55,6 @@ exports.createUser = async (req, res) => {
     try {
         const user = new User({
             userId: user_id,
-            uid_rfid: uid_rfid,
             name: name,
             last_name: last_name,
             birthday: birthday,
@@ -68,7 +67,7 @@ exports.createUser = async (req, res) => {
 
         await user.save();
 
-        const token = jwt.sign({ id: user.userId, email: email, uid: uid_rfid, code: code_new }, SECRET_KEY, { expiresIn: '90d' });
+        const token = jwt.sign({ id: user.userId, email: email, code: code_new }, SECRET_KEY, { expiresIn: '90d' });
         
         res.status(201).json({ data: user, token: token });
     } catch (err) {
