@@ -9,8 +9,8 @@ class ApiService {
   final String localNetworkIP = "181.230.199.209";
   final String localNetworkIPEscuela = "190.139.136.234";
   late final String baseUrl = Platform.isAndroid 
-      ? 'http://10.0.2.2:5000/api' // Para emulador Android (10.0.2.2 apunta a localhost de la máquina host)
-      : 'http://$localNetworkIPEscuela:5000/api'; // Para iOS o dispositivos físicos, ajustar según necesidad
+      ? 'http://10.0.2.2:3000/api' // Para emulador Android (10.0.2.2 apunta a localhost de la máquina host)
+      : 'http://$localNetworkIPEscuela:3000/api'; // Para iOS o dispositivos físicos, ajustar según necesidad
       
   final storage = FlutterSecureStorage();
   // token
