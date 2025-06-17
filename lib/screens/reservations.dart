@@ -186,9 +186,23 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
 
   List<Widget> _generateReservationCards() {
     final List<Widget> cards = [];
-    
+    final now = DateTime.now().toLocal();
+    final selectedDate = DateTime(currentDate.year, currentDate.month, selectedDay);
+    final isToday = selectedDate.year == now.year && selectedDate.month == now.month && selectedDate.day == now.day;
+
+    //debugPrint('=== _generateReservationCards ===');
+    //debugPrint('now: $now');
+    //debugPrint('selectedDate: $selectedDate  (isToday: $isToday)');
+
     // tarjetas para cada hora del día (6 AM a 10 PM)
-    for (int hour = 6; hour < 22; hour++) {
+    for (int hour = 6; hour <= 22; hour++) {
+      final slotTime = DateTime(selectedDate.year, selectedDate.month, selectedDate.day, hour);
+      //debugPrint('  hour=$hour  slotTime=$slotTime  isBefore(now)? ${slotTime.isBefore(now)}');
+      if (isToday && slotTime.isBefore(now)) {
+        // si es hoy y la hora ya pasó, no muestra la tarjeta
+        continue;
+      }
+
       final availability = _getAvailabilityForHour(hour);
       final isAvailable = (availability['available'] ?? 0) > 0;
       final hasUserReservation = _hasUserReservationAtHour(hour);
