@@ -1,5 +1,5 @@
 name: Park_Elite
-description: "A new Flutter project."
+description: "Estacionamiento automatizado"
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 1.0.0+1
 
@@ -16,6 +16,7 @@ dependencies:
   google_fonts: ^6.2.1
   connectivity_plus: ^5.0.2
   internet_connection_checker: ^1.0.0+1
+  device_info_plus: ^10.1.0
 
 dev_dependencies:
   flutter_test:

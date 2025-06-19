@@ -16,21 +16,21 @@ class ConnectivityService {
 }
 
 Future<void> checkServerConnection({
+  required ApiService apiService,
   required VoidCallback onSuccess,
   required VoidCallback onError,
 }) async {
-  final api = ApiService();
   try {
-    final data = await api.checkServerStatus();
-    //print('🟢 checkServerConnection success: $data');
+    final data = await apiService.checkServerStatus();
+    print('🟢 checkServerConnection success: $data');
     if (data['message'] == 'OK') {
       onSuccess();
     } else {
-      //print('⚠️ Mensaje inesperado del servidor: ${data['message']}');
+      print('⚠️ Mensaje inesperado del servidor: ${data['message']}');
       onError();
     }
   } catch (e) {
-    //print('🔴 Error en checkServerConnection: $e');
+    print('🔴 Error en checkServerConnection: $e');
     onError();
   }
 }

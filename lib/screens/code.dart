@@ -11,52 +11,61 @@ class CodeScreen extends StatefulWidget {
 }
 
 class _CodeScreen extends State<CodeScreen> {
-  final ApiService api = ApiService();
+  ApiService? api;
   bool isLoading = true;
   bool hasError = false;
   String? codigo;
 
   @override
   void initState() {
-    loadUserCode();
-    loadConnectionStatus();
     super.initState();
+    initializeAndLoad();
+  }
+
+  Future<void> initializeAndLoad() async {
+    try {
+      api = ApiService();
+      await api!.initBaseUrl();
+      
+      await checkServerConnection(
+        apiService: api!,
+        onSuccess: () async {
+          await loadUserCode();
+        },
+        onError: () {
+          setState(() {
+            isLoading = false;
+            hasError = true;
+          });
+        },
+      );
+    } catch (e) {
+      print('Error en inicialización: $e');
+      setState(() {
+        isLoading = false;
+        hasError = true;
+      });
+    }
   }
 
   Future<void> loadUserCode() async {
     try {
-      final data = await api.getCode();
+      final data = await api!.getCode();
       if (data == null) {
         throw Exception('Respuesta inválida del servidor');
       }
-      codigo = data.toString();
       setState(() {
+        codigo = data.toString();
         isLoading = false;
+        hasError = false;
       });
     } catch (e) {
-      print('Error al cargar usuario: $e');
+      print('Error al cargar código de usuario: $e');
       setState(() {
         hasError = true;
         isLoading = false;
       });
     }
-  } 
-
-  Future<void> loadConnectionStatus() async {
-    await checkServerConnection(
-      onSuccess: () {
-        setState(() {
-          isLoading = false;
-          hasError = false;
-        });
-      },
-      onError: () {
-        setState(() {
-          isLoading = false;
-          hasError = true;
-        });
-      },
-    );
   }
 
   @override
@@ -87,7 +96,7 @@ class _CodeScreen extends State<CodeScreen> {
                     isLoading = true;
                     hasError = false;
                   });
-                  loadConnectionStatus(); // Reintenta la carga
+                  initializeAndLoad(); // Reintenta todo el proceso
                 },
                 child: const Text('Reintentar', style: TextStyle(color: Colors.red)),
               ),

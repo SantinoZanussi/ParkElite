@@ -3,16 +3,48 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../utils/connectivity_service.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'dart:async';
 
 class ApiService {
+  // Singleton pattern
+  static final ApiService _instance = ApiService._internal();
+  factory ApiService() => _instance;
+  ApiService._internal();
+  
   final String localNetworkIP = "181.230.199.209";
-  final String localNetworkIPEscuela = "190.139.136.234";
-  late final String baseUrl = Platform.isAndroid 
-      ? 'http://10.0.2.2:3000/api' // Para emulador Android (10.0.2.2 apunta a localhost de la máquina host)
-      : 'http://$localNetworkIPEscuela:3000/api'; // Para iOS o dispositivos físicos, ajustar según necesidad
-      
+  final String localNetworkIPEscuela = "192.168.2.165"; // 190.139.136.234
+  late final String baseUrl;
+  bool _isInitialized = false;
+
+  Future<void> initBaseUrl() async {
+    if (_isInitialized) return; // Evitar múltiples inicializaciones
+    
+    final deviceInfo = DeviceInfoPlugin();
+
+    if (Platform.isAndroid) {
+      final androidInfo = await deviceInfo.androidInfo;
+      final isEmulator = !androidInfo.isPhysicalDevice;
+
+      baseUrl = isEmulator
+          ? 'http://10.0.2.2:3000/api' // Emulador Android
+          : 'http://$localNetworkIPEscuela:3000/api'; // Dispositivo físico Android
+    } else {
+      baseUrl = 'http://$localNetworkIPEscuela:3000/api'; // iOS físico o emulador
+    }
+    
+    _isInitialized = true;
+  }
+
+  // Verificar si está inicializado antes de usar baseUrl
+  void _ensureInitialized() {
+    if (!_isInitialized) {
+      throw Exception('ApiService no ha sido inicializado. Llama a initBaseUrl() primero.');
+    }
+  }
+
   final storage = FlutterSecureStorage();
+  
   // token
   Future<String?> getToken() async {
     return await storage.read(key: 'auth_token');
@@ -20,6 +52,7 @@ class ApiService {
 
   // login
   Future<Map<String, dynamic>> login(String email, String password) async {
+    _ensureInitialized();
     try {
       final internet = await ConnectivityService.hasInternet();
       if (!internet) { throw Exception('❎ No hay conexión a internet.'); }
@@ -54,6 +87,7 @@ class ApiService {
     String birthday,
     String home_address,
     ) async {
+    _ensureInitialized();
     try {
       final internet = await ConnectivityService.hasInternet();
       if (!internet) { throw Exception('❎ No hay conexión a internet.'); }
@@ -80,6 +114,7 @@ class ApiService {
 
   // obtener datos del usuario
   Future<Map<String, dynamic>> getUser() async {
+    _ensureInitialized();
     try {
       final internet = await ConnectivityService.hasInternet();
       if (!internet) { throw Exception('❎ No hay conexión a internet.'); }
@@ -107,6 +142,7 @@ class ApiService {
 
   // obtener reservas del usuario
   Future<List<dynamic>> getUserReservations() async {
+    _ensureInitialized();
     try {
       final internet = await ConnectivityService.hasInternet();
       if (!internet) { throw Exception('❎ No hay conexión a internet.'); }
@@ -133,52 +169,54 @@ class ApiService {
   }
 
   // crear una reserva
-Future<Map<String, dynamic>> createReservation(
-  DateTime reservationDate,
-  DateTime startTime, 
-  DateTime endTime
-) async {
-  try {
-    final internet = await ConnectivityService.hasInternet();
-    if (!internet) { throw Exception('❎ No hay conexión a internet.'); }
+  Future<Map<String, dynamic>> createReservation(
+    DateTime reservationDate,
+    DateTime startTime, 
+    DateTime endTime
+  ) async {
+    _ensureInitialized();
+    try {
+      final internet = await ConnectivityService.hasInternet();
+      if (!internet) { throw Exception('❎ No hay conexión a internet.'); }
 
-    final token = await getToken();
+      final token = await getToken();
 
-    // Convertir a UTC
-    final startUtcIso = startTime.toUtc().toIso8601String();
-    final endUtcIso = endTime.toUtc().toIso8601String();
-    final dateIso = reservationDate.toUtc().toIso8601String();
+      // Convertir a UTC
+      final startUtcIso = startTime.toUtc().toIso8601String();
+      final endUtcIso = endTime.toUtc().toIso8601String();
+      final dateIso = reservationDate.toUtc().toIso8601String();
 
-    final response = await http.post(
-      Uri.parse('$baseUrl/reservas'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json'
-      },
-      body: jsonEncode({
-        'reservationDate': dateIso,
-        'startTime': startUtcIso,
-        'endTime': endUtcIso,
-      }),
-    );
+      final response = await http.post(
+        Uri.parse('$baseUrl/reservas'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json'
+        },
+        body: jsonEncode({
+          'reservationDate': dateIso,
+          'startTime': startUtcIso,
+          'endTime': endUtcIso,
+        }),
+      );
 
-    if (response.statusCode == 201) {
-      return jsonDecode(response.body);
-    } else {
-      final errorData = jsonDecode(response.body);
-      throw Exception(errorData['message'] ?? 'Error al crear la reserva');
+      if (response.statusCode == 201) {
+        return jsonDecode(response.body);
+      } else {
+        final errorData = jsonDecode(response.body);
+        throw Exception(errorData['message'] ?? 'Error al crear la reserva');
+      }
+    } catch (e) {
+      print('Error de conexión en createReservation: $e');
+      throw Exception('Error de conexión: $e');
     }
-  } catch (e) {
-    print('Error de conexión en createReservation: $e');
-    throw Exception('Error de conexión: $e');
   }
-}
 
   Future<List<dynamic>> getAvailableSpots(
     DateTime date,
     DateTime startTime,
     DateTime endTime
   ) async {
+    _ensureInitialized();
     try {
       final internet = await ConnectivityService.hasInternet();
       if (!internet) { throw Exception('❎ No hay conexión a internet.'); }
@@ -213,6 +251,7 @@ Future<Map<String, dynamic>> createReservation(
   }
 
   Future<void> cancelReservation(String reservationId) async {
+    _ensureInitialized();
     try {
       final internet = await ConnectivityService.hasInternet();
       if (!internet) { throw Exception('❎ No hay conexión a internet.'); }
@@ -238,6 +277,7 @@ Future<Map<String, dynamic>> createReservation(
   }
 
   Future<List<dynamic>> getOccupancyStats(DateTime date) async {
+    _ensureInitialized();
     try {
       final internet = await ConnectivityService.hasInternet();
       if (!internet) { throw Exception('❎ No hay conexión a internet.'); }
@@ -279,40 +319,41 @@ Future<Map<String, dynamic>> createReservation(
     }
   }
 
-Future<Map<String, dynamic>> checkServerStatus() async {
-  final internet = await ConnectivityService.hasInternet();
-  //print('🌐 Conexión a internet: $internet');
-  if (!internet) throw Exception('❎ No hay conexión a internet.');
+  Future<Map<String, dynamic>> checkServerStatus() async {
+    _ensureInitialized();
+    final internet = await ConnectivityService.hasInternet();
+    print('🌐 Conexión a internet: $internet');
+    if (!internet) throw Exception('❎ No hay conexión a internet.');
 
-  try {
-  final url = '$baseUrl/health-check';
-  //print('➡️ Llamando a: $url');
-  final response = await http.get(Uri.parse(url)).timeout(Duration(seconds: 7));
-  //print('⬅️ Código de respuesta: ${response.statusCode}');
-  //print('⬅️ Cuerpo: ${response.body}');
+    try {
+      final url = '$baseUrl/health-check';
+      print('➡️ Llamando a: $url');
+      final response = await http.get(Uri.parse(url)).timeout(Duration(seconds: 7));
+      print('⬅️ Código de respuesta: ${response.statusCode}');
+      print('⬅️ Cuerpo: ${response.body}');
 
-  if (response.statusCode == 200) {
-    final data = jsonDecode(response.body);
-    //print('📦 Respuesta decodificada: $data');
-    if (data['message'] == 'OK') {
-      return {'status': 'success', 'message': data['message']};
-    } else {
-      throw Exception('El servidor no está disponible: ${data['message']}');
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        print('📦 Respuesta decodificada: $data');
+        if (data['message'] == 'OK') {
+          return {'status': 'success', 'message': data['message']};
+        } else {
+          throw Exception('El servidor no está disponible: ${data['message']}');
+        }
+      } else {
+        throw Exception('Error al verificar estado del servidor: ${response.statusCode}');
+      }
+    } on TimeoutException catch (e) {
+      print('⏳ Timeout al verificar estado del servidor: $e');
+      throw Exception('El servidor no responde. Inténtalo más tarde.');
+    } catch (e) {
+      print('🔴 Error al verificar estado del servidor: $e');
+      throw Exception('Error de conexión: $e');
     }
-  } else {
-    throw Exception('Error al verificar estado del servidor: ${response.statusCode}');
-  }
-  } on TimeoutException catch (e) {
-    //print('⏳ Timeout al verificar estado del servidor: $e');
-    throw Exception('El servidor no responde. Inténtalo más tarde.');
-  } catch (e) {
-    //print('🔴 Error al verificar estado del servidor: $e');
-    throw Exception('Error de conexión: $e');
   }
 
-}
-
-Future<int> getCode() async {
+  Future<int> getCode() async {
+    _ensureInitialized();
     try {
       final internet = await ConnectivityService.hasInternet();
       if (!internet) { throw Exception('❎ No hay conexión a internet.'); }
@@ -337,6 +378,5 @@ Future<int> getCode() async {
       print('Error de conexión en getCode: $e');
       throw Exception('Error de conexión: $e');
     }
-}
-
+  }
 }

@@ -9,8 +9,6 @@ const reservationSchema = new mongoose.Schema({
   code: {
     type: Number,
     required: true,
-    unique: true,
-    parse: true
   },
   parkingSpotId: {
     type: mongoose.Schema.Types.ObjectId,

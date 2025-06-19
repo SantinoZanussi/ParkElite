@@ -3,13 +3,18 @@ import './screens/login.dart';
 import './screens/home.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import './services/api_service.dart';
 
-void main() {
-  runApp(const MyApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final api = ApiService();
+  await api.initBaseUrl();
+  runApp(MyApp(apiService: api));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
+  final ApiService apiService;
+  const MyApp({Key? key, required this.apiService}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -17,13 +22,14 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'ParkElite',
       theme: ThemeData(fontFamily: 'SanFrancisco', useMaterial3: true),
-      home: const AuthWrapper(),
+      home: AuthWrapper(apiService: apiService),
     );
   }
 }
 
 class AuthWrapper extends StatelessWidget {
-  const AuthWrapper({Key? key}) : super(key: key);
+  final ApiService apiService;
+  const AuthWrapper({Key? key, required this.apiService}) : super(key: key);
 
   Future<bool> isLoggedIn() async {
     final storage = FlutterSecureStorage();

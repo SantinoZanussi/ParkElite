@@ -35,7 +35,7 @@ exports.createReservation = async (req, res) => {
     // si el usuario ya tiene una reserva para ese día
     const existingReservation = await Reservation.findOne({
       userId: req.user.id,
-      code: req.user.code,
+      code: userInfo.code,
       reservationDate: {
         $gte: new Date(dateObj.setHours(0, 0, 0, 0)),
         $lt: new Date(dateObj.setHours(23, 59, 59, 999))
@@ -59,7 +59,7 @@ exports.createReservation = async (req, res) => {
 
     const reservation = new Reservation({
       userId: req.user.id,
-      code: req.user.code,
+      code: userInfo.code,
       parkingSpotId: availableSpot._id,
       startTime: new Date(startTime),
       endTime: new Date(endTime),

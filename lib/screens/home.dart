@@ -13,7 +13,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreen extends State<HomeScreen> {
-  final ApiService api = ApiService();
+  ApiService? api;
   String? userName;
   bool isLoading = true;
   bool hasError = false;
@@ -21,13 +21,39 @@ class _HomeScreen extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    loadConnectionStatus();
+    initializeAndLoad();
     loadUser();
+  }
+
+    Future<void> initializeAndLoad() async {
+    try {
+      api = ApiService();
+      await api!.initBaseUrl();
+      
+      await checkServerConnection(
+        apiService: api!,
+        onSuccess: () async {
+          await loadUser();
+        },
+        onError: () {
+          setState(() {
+            isLoading = false;
+            hasError = true;
+          });
+        },
+      );
+    } catch (e) {
+      print('Error en inicialización: $e');
+      setState(() {
+        isLoading = false;
+        hasError = true;
+      });
+    }
   }
 
   Future<void> loadUser() async {
     try {
-      final data = await api.getUser();
+      final data = await api!.getUser();
 
       if (data == null || data['name'] == null) {
         throw Exception('Respuesta inválida del servidor');
@@ -44,23 +70,6 @@ class _HomeScreen extends State<HomeScreen> {
         isLoading = false;
       });
     }
-  } 
-
-  Future<void> loadConnectionStatus() async {
-    await checkServerConnection(
-      onSuccess: () {
-        setState(() {
-          isLoading = false;
-          hasError = false;
-        });
-      },
-      onError: () {
-        setState(() {
-          isLoading = false;
-          hasError = true;
-        });
-      },
-    );
   }
 
   @override
@@ -91,7 +100,7 @@ class _HomeScreen extends State<HomeScreen> {
                     isLoading = true;
                     hasError = false;
                   });
-                  loadConnectionStatus(); // Reintenta la carga
+                  initializeAndLoad(); // Reintenta la carga
                 },
                 child: const Text('Reintentar', style: TextStyle(color: Colors.red)),
               ),

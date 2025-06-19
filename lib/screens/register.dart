@@ -12,6 +12,7 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
+  ApiService? api;
   final TextEditingController nameController = TextEditingController();
   final TextEditingController last_nameController = TextEditingController();
   final TextEditingController phone_numberController = TextEditingController();
@@ -27,7 +28,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   void initState() {
     super.initState();
-    loadConnectionStatus();
+    initializeAndLoad();
   }
 
   @override
@@ -43,21 +44,32 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  Future<void> loadConnectionStatus() async {
-    await checkServerConnection(
-      onSuccess: () {
-        setState(() {
-          isLoading = false;
-          hasError = false;
-        });
-      },
-      onError: () {
-        setState(() {
-          isLoading = false;
-          hasError = true;
-        });
-      },
-    );
+  Future<void> initializeAndLoad() async {
+    try {
+      api = ApiService();
+      await api!.initBaseUrl();
+      await checkServerConnection(
+        apiService: api!,
+        onSuccess: () {
+          setState(() {
+            isLoading = false;
+            hasError = false;
+          });
+        },
+        onError: () {
+          setState(() {
+            isLoading = false;
+            hasError = true;
+          });
+        },
+      );
+    } catch (e) {
+      print('Error en inicialización: $e');
+      setState(() {
+        isLoading = false;
+        hasError = true;
+      });
+    }
   }
 
   Widget build(BuildContext context) {
@@ -87,7 +99,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     isLoading = true;
                     hasError = false;
                   });
-                  loadConnectionStatus(); // Reintenta la carga
+                  initializeAndLoad(); // Reintenta la carga
                 },
                 child: const Text('Reintentar', style: TextStyle(color: Colors.red)),
               ),

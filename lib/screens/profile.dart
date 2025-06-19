@@ -12,30 +12,42 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  ApiService? api;
   bool isLoading = true;
   bool hasError = false;
 
   @override
   void initState() {
     super.initState();
-    loadConnectionStatus();
+    initializeAndLoad();
   }
 
-  Future<void> loadConnectionStatus() async {
-    await checkServerConnection(
-      onSuccess: () {
-        setState(() {
-          isLoading = false;
-          hasError = false;
-        });
-      },
-      onError: () {
-        setState(() {
-          isLoading = false;
-          hasError = true;
-        });
-      },
-    );
+  Future<void> initializeAndLoad() async {
+    try {
+      api = ApiService();
+      await api!.initBaseUrl();
+      await checkServerConnection(
+        apiService: api!,
+        onSuccess: () {
+          setState(() {
+            isLoading = false;
+            hasError = false;
+          });
+        },
+        onError: () {
+          setState(() {
+            isLoading = false;
+            hasError = true;
+          });
+        },
+      );
+    } catch (e) {
+      print('Error en inicialización: $e');
+      setState(() {
+        isLoading = false;
+        hasError = true;
+      });
+    }
   } 
 
   Widget build(BuildContext context) {
@@ -66,7 +78,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     isLoading = true;
                     hasError = false;
                   });
-                  loadConnectionStatus(); // Reintenta la carga
+                  initializeAndLoad(); // Reintenta la carga
                 },
                 child: const Text('Reintentar', style: TextStyle(color: Colors.red)),
               ),
