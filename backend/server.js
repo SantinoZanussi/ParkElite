@@ -57,7 +57,7 @@ connectDB().then(() => {
 
 
 /* .env info
-MONGO_URL = mongodb+srv://DBUser:porriki319@cluster0.tscwgzd.mongodb.net/
+MONGO_URL = mongodb+srv://DBUser:porriki319@cluster0.tscwgzd.mongodb.net/app
 PORT = 3000
 JWT_SECRET = 1234567890
 */
