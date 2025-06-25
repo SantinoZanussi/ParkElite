@@ -12,8 +12,8 @@ class ApiService {
   factory ApiService() => _instance;
   ApiService._internal();
   
-  final String localNetworkIP = "181.230.199.209";
-  final String localNetworkIPEscuela = "192.168.2.165"; // 190.139.136.234
+  final String localNetworkIP = "192.168.0.24";
+  final String localNetworkIPEscuela = "192.168.2.165";
   late final String baseUrl;
   bool _isInitialized = false;
 
