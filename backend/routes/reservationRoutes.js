@@ -24,4 +24,10 @@ router.get('/occupancy-stats', authMiddleware, reservationController.getOccupanc
 // cancelar reserva
 router.delete('/:reservationId', authMiddleware, reservationController.cancelReservation);
 
+// confirmar llegada
+router.post('/confirm-arrival', reservationController.confirm_arrival);
+
+// cancelar llegada por expiración
+router.post('/cancel-arrival', reservationController.cancel_expired);
+
 module.exports = router;

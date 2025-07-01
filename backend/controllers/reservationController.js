@@ -169,6 +169,36 @@ exports.getOccupancyStats = async (req, res) => {
   }
 };
 
+exports.confirm_arrival = async (req, res) => {
+  console.log('Confirming arrival...');
+  console.log(req.body);
+  const reservationId = req.body.reservationId;
+  const reservation = await Reservation.findOne({
+    parkingSpotId: reservationId,
+    status: { $ne: 'cancelado' }
+  });
+  if (!reservation) return res.status(404).json({ message: 'Reserva no encontrada', allowed: false });
+  if (reservation.status === 'confirmado') {
+    return res.json({ message: 'La reserva confirmada', allowed: true, reservation });
+  }
+}
+
+exports.cancel_expired = async (req, res) => {
+  console.log('cancel_expired');
+  console.log(req.body);
+  const reservationId = req.body.reservationId;
+  const reservation = await Reservation.findOne({
+    parkingSpotId: reservationId,
+    status: { $ne: 'cancelado' }
+  });
+  if (!reservation) return res.status(404).json({ message: 'Reserva no encontrada', allowed: false });
+  if (reservation.status === 'confirmado') {
+    reservation.status = 'cancelado';
+    await reservation.save();
+    return res.json({ message: 'La reserva ha sido cancelada', allowed: true, reservation });
+  }
+}
+
 exports.checkCodeUser = async (req, res) => {
   const user_code = req.body.code; 
 
