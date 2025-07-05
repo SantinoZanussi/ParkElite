@@ -7,7 +7,6 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'dart:async';
 
 class ApiService {
-  // Singleton pattern
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
   ApiService._internal();

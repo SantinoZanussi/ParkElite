@@ -28,6 +28,8 @@ app.all('/api/*', (req, res) => {
 
 require('./scripts/updateCodes');
 
+const { scheduleStatusUpdate, runStatusUpdateTask } = require('./scripts/updateReservationStatus');
+
 //* Iniciar servidor
 
 function getLocalIPv4() {
@@ -50,6 +52,8 @@ connectDB().then(() => {
     console.log(` → Servidor corriendo en:`);
     console.log(`    • http://localhost:${PORT}`);
     console.log(`    • http://${localIP}:${PORT}`);
+    runStatusUpdateTask();
+    scheduleStatusUpdate();
   });
 }).catch(err => {
   console.error("Error al conectar a la base de datos:", err);

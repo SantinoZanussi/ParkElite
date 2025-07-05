@@ -2,15 +2,65 @@ const Reservation = require('../models/reservation');
 const ParkingSpot = require('../models/parkingSpot');
 const User = require('../models/user');
 
+// actualiza reservas a completadas
+exports.updateCompletedReservations = async (req, res) => {
+  try {
+    const now = new Date();
+    const completedReservations = await Reservation.updateMany(
+      {
+        endTime: { $lt: now },
+        status: 'confirmado'
+      },
+      {
+        $set: { status: 'completado' }
+      }
+  );
+  if (completedReservations.modifiedCount !== 0) { console.log(`${completedReservations.modifiedCount} reservas actualizadas a estado "completado".`); }
+  return completedReservations;
+  } catch (error) {
+    console.error('Error al actualizar reservas completadas:', error);
+    throw error;
+  }
+}
+
+// para marcar manualmente una reserva como completada (por si acaso)
+exports.markReservationAsCompleted = async (req, res) => {
+  try {
+    const { reservationId } = req.params;
+    
+    const reservation = await Reservation.findOne({
+      _id: reservationId,
+      status: 'confirmado'
+    });
+    
+    if (!reservation) {
+      return res.status(404).json({ 
+        message: 'Reserva no encontrada o no fue completada' 
+      });
+    }
+    
+    reservation.status = 'completado';
+    await reservation.save();
+    
+    res.json({ 
+      message: 'Reserva marcada como completada',
+      reservation: reservation 
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error del servidor' });
+  }
+};
+
 exports.getUserReservations = async (req, res) => {
   try {
+    await exports.updateCompletedReservations(); // actualizar reservas
     const reservations = await Reservation.find({ 
       userId: req.user.id,
-      status: { $ne: 'cancelado' }
+      status: { $nin: ['cancelado', 'completado'] }
     })
     .populate('parkingSpotId')
     .sort({ reservationDate: 1, startTime: 1 });
-    
     res.json(reservations);
   } catch (err) {
     console.error(err);
@@ -72,7 +122,7 @@ exports.createReservation = async (req, res) => {
     res.status(201).json(reservation);
   } catch (err) {
     console.error(err);
-    if (err.message === 'No se pueden hacer reservas los domingos') {
+    if (err.message === 'No se pueden hacer reservas los domingos.') {
       return res.status(400).json({ message: err.message });
     }
     res.status(500).json({ message: 'Error del servidor' });
@@ -127,6 +177,39 @@ exports.cancelReservation = async (req, res) => {
   }
 };
 
+exports.cancelSpecificReservation = async (req, res) => {
+  const { reservationId } = req.params;
+
+  try {
+    const reservation = await Reservation.findOne({
+      _id: reservationId,
+    });
+
+    if (!reservation) {
+      return res.status(404).json({ message: 'Reserva no encontrada' });
+    } else if (reservation.status === 'cancelado') {
+      return res.status(400).json({ message: 'La reserva ya está cancelada' });
+    } else if (reservation.status === 'completado') {
+      return res.status(400).json({ message: 'La reserva ya está completada' });
+    }
+
+    const now = new Date();
+    if (reservation.startTime <= now) {
+      return res.status(400).json({ 
+        message: 'No se pueden cancelar reservas que ya comenzaron' 
+      });
+    }
+
+    reservation.status = 'cancelado';
+    await reservation.save();
+
+    res.json({ message: 'Reserva cancelada exitosamente' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error del servidor' });
+  }
+};
+
 exports.getOccupancyStats = async (req, res) => {
   const { date } = req.query;
 
@@ -141,7 +224,7 @@ exports.getOccupancyStats = async (req, res) => {
         $gte: startOfDay,
         $lt: endOfDay
       },
-      status: { $ne: 'cancelado' }
+      status: { $nin: ['cancelado', 'completado'] }
     }).populate('parkingSpotId');
 
     // calcular estadísticas por cada hora del día
@@ -174,8 +257,8 @@ exports.confirm_arrival = async (req, res) => {
   console.log(req.body);
   const reservationId = req.body.reservationId;
   const reservation = await Reservation.findOne({
-    parkingSpotId: reservationId,
-    status: { $ne: 'cancelado' }
+    _id: reservationId,
+    status: { $nin: ['cancelado', 'completado'] }
   });
   if (!reservation) return res.status(404).json({ message: 'Reserva no encontrada', allowed: false });
   if (reservation.status === 'confirmado') {
@@ -188,8 +271,8 @@ exports.cancel_expired = async (req, res) => {
   console.log(req.body);
   const reservationId = req.body.reservationId;
   const reservation = await Reservation.findOne({
-    parkingSpotId: reservationId,
-    status: { $ne: 'cancelado' }
+    _id: reservationId,
+    status: { $nin: ['cancelado', 'completado'] }
   });
   if (!reservation) return res.status(404).json({ message: 'Reserva no encontrada', allowed: false });
   if (reservation.status === 'confirmado') {
@@ -246,7 +329,7 @@ async function checkSpotAvailability(spotId, date, startTime, endTime) {
       $gte: startOfDay,
       $lt: endOfDay
     },
-    status: { $ne: 'cancelado' },
+    status: { $nin: ['cancelado', 'completado'] },
     $or: [
       { 
         startTime: { $lt: endTime }, 

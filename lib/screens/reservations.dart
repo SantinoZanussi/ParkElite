@@ -419,13 +419,19 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       setState(() {
         isLoading = true;
       });
-
       final reservationDate = DateTime(currentDate.year, currentDate.month, selectedDay);
       final startTime = DateTime(reservationDate.year, reservationDate.month, reservationDate.day, hour, 0, 0);
       final endTime = startTime.add(duration);
-
       // verificar que no exceda las 22:00
-      if (endTime.hour > 22 || endTime.hour < 06) {
+      if (endTime.weekday == DateTime.sunday) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('El estacionamiento no abre los domingos.')),
+        );
+        setState(() {
+          isLoading = false;
+        });
+        return;
+      } else if (endTime.hour > 22 || endTime.hour < 06) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('La reserva no puede extenderse más allá de las 22:00')),
         );
