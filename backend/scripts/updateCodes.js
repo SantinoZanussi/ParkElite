@@ -15,8 +15,8 @@ async function actualizarCodigosUsuarios() {
     const usuarios = await User.find();
   
     for (const usuario of usuarios) {
-      const nuevoCodigo = await generarCodigoUnico();
-      usuario.codigo = nuevoCodigo;
+      const nuevoCodigo = await createCode();
+      usuario.code = nuevoCodigo;
       await usuario.save();
     }
   }
@@ -26,3 +26,5 @@ cron.schedule('0 0 */2 * *', () => {
     console.log('⏰ Ejecutando tarea: Actualizar códigos cada 2 días');
     actualizarCodigosUsuarios();
 });
+
+module.exports = { actualizarCodigosUsuarios, createCode };

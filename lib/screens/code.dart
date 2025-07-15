@@ -78,6 +78,7 @@ class _CodeScreen extends State<CodeScreen> {
 
     if (hasError) {
       return Scaffold(
+        backgroundColor: const Color(0xFFF5F5F5),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -107,6 +108,7 @@ class _CodeScreen extends State<CodeScreen> {
     }
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF5F5F5),
       body: Stack(
         children: [
           SafeArea(
@@ -139,13 +141,13 @@ class _CodeScreen extends State<CodeScreen> {
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(20.0),
                           border: Border.all(
-                            color: const Color(0xFFE0E0E0),
+                            color: const Color(0xFF76E0AC), // const Color(0xFFE0E0E0)
                             width: 2.0,
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.08),
-                              blurRadius: 12.0,
+                              color: const Color(0xFF76E0AC).withOpacity(0.08),
+                              blurRadius: 16.0,
                               offset: const Offset(0, 4),
                             ),
                           ],
@@ -167,7 +169,7 @@ class _CodeScreen extends State<CodeScreen> {
                               style: const TextStyle(
                                 fontSize: 36,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFF333333),
+                                color: Color(0xFF76E0AC),
                                 letterSpacing: 4.0,
                               ),
                             ),

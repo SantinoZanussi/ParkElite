@@ -81,6 +81,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     if (hasError) {
       return Scaffold(
+        backgroundColor: const Color(0xFFF5F5F5),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -110,6 +111,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF5F5F5),
       body: SafeArea(
         top: false,
         child: SingleChildScrollView(
@@ -118,24 +120,37 @@ class _RegisterScreenState extends State<RegisterScreen> {
               children: [
                 Container(
                   width: double.infinity,
-                  constraints: const BoxConstraints(maxWidth: 500),
-                  margin: const EdgeInsets.only(bottom: 30),
+                  padding: const EdgeInsets.symmetric(vertical: 55, horizontal: 25),
                   child: ClipRRect(
+                    borderRadius: BorderRadius.circular(100),
                     child: SizedBox(
-                      height: 220,
+                      height: 100,
                       child: Image.asset(
-                        'assets/images/login.png',
+                        'assets/images/logo_entero_premium.png',
                         fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            Container(
-                          height: 220,
-                          color: Colors.grey[300],
-                          child: const Center(
-                            child: Text('Imagen no disponible'),
-                          ),
-                        ),
+                        errorBuilder:
+                            (context, error, stackTrace) => Container(
+                              height: 100,
+                              color: Colors.grey[300],
+                              child: const Center(
+                                child: Text('Imagen no disponible'),
+                              ),
+                            ),
                       ),
                     ),
+                  ),
+                ),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 15),
+                  child: Column(
+                    children: [
+                      const Text(
+                        'Registrate',
+                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: Color(0xFF3e4a77)),
+                      ),
+                      const SizedBox(height: 30),
+                    ],
                   ),
                 ),
                 Container(
@@ -146,50 +161,50 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     children: [
                       BuildInputField(
                         hintText: 'Nombre',
-                        icon: Icon(Icons.person, color: Colors.grey[700]),
+                        icon: Icon(Icons.person, color: Color(0xFF3e4a77)),
                         keyboardType: TextInputType.name,
                         controller: nameController,
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 30),
                       BuildInputField(
                         hintText: 'Apellido',
-                        icon: Icon(Icons.person, color: Colors.grey[700]),
+                        icon: Icon(Icons.person, color: Color(0xFF3e4a77)),
                         keyboardType: TextInputType.name,
                         controller: last_nameController,
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 30),
                       BuildInputField(
                         hintText: 'Celular',
-                        icon: Icon(Icons.local_phone, color: Colors.grey[700]),
+                        icon: Icon(Icons.local_phone, color: Color(0xFF3e4a77)),
                         keyboardType: TextInputType.phone,
                         controller: phone_numberController,
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 30),
                       BuildInputField(
                         hintText: 'Fecha de nacimiento (DD/MM/AAAA)',
-                        icon: Icon(Icons.calendar_month, color: Colors.grey[700]),
+                        icon: Icon(Icons.calendar_month, color: Color(0xFF3e4a77)),
                         keyboardType: TextInputType.datetime,
                         controller: birthdayController,
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 30),
                       BuildInputField(
                         hintText: 'Domicilio',
-                        icon: Icon(Icons.home, color: Colors.grey[700]),
+                        icon: Icon(Icons.home, color: Color(0xFF3e4a77)),
                         keyboardType: TextInputType.streetAddress,
                         controller: home_addressController,
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 30),
                       BuildInputField(
                         hintText: 'Email',
-                        icon: Icon(Icons.email, color: Colors.grey[700]),
+                        icon: Icon(Icons.email, color: Color(0xFF3e4a77)),
                         keyboardType: TextInputType.emailAddress,
                         controller: emailController,
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 30),
                       PasswordInputField(controller: passwordController),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 30),
                       PasswordRegisterInputField(controller: confirmPasswordController),
-                      const SizedBox(height: 40),
+                      const SizedBox(height: 50),
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
@@ -227,11 +242,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 domicilio,
                               ).then((value) {
                                 if (value['status'] == 'success') {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Registro exitoso'),
-                                    ),
-                                  );
                                   navigateTo(context, 'home');
                                 } else {
                                   ScaffoldMessenger.of(context).showSnackBar(
@@ -250,7 +260,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             }
                           },
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF1D2130),
+                            backgroundColor: const Color(0xFF3e4a77),
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 15),
                             shape: RoundedRectangleBorder(
@@ -287,7 +297,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           const Text(
-                            '¿Ya tienes una cuenta? ',
+                            '¿Ya tenes una cuenta? ',
                             style: TextStyle(fontSize: 14),
                           ),
                           GestureDetector(
@@ -297,7 +307,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             child: const Text(
                               'Inicia sesión',
                               style: TextStyle(
-                                color: Colors.black,
+                                color: Color(0xFF3e4a77),
                                 decoration: TextDecoration.underline,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 14,
@@ -311,6 +321,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         'Versión 1.0',
                         style: TextStyle(color: Colors.grey[600], fontSize: 12),
                       ),
+                      const SizedBox(height: 10),
                     ],
                   ),
                 ),

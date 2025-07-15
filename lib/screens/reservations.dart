@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../widgets/class_card_reservations.dart';
 import '../widgets/date_selector.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../services/api_service.dart';
@@ -108,6 +107,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     final monthText = "${getMonthName(currentDate.month)} ${currentDate.year}";
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF5F5F5),
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(60),
         child: AppBar(
@@ -164,10 +164,10 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                             child: Padding(
                               padding: EdgeInsets.all(20.0),
                               child: Text(
-                                'No hay reservas disponibles los domingos',
+                                'No hay reservas disponibles los domingos.',
                                 style: TextStyle(
                                   fontSize: 16,
-                                  color: Colors.grey,
+                                  color: Color(0xFF5a5d61),
                                 ),
                               ),
                             ),
@@ -213,12 +213,13 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
           child: Container(
             margin: const EdgeInsets.only(bottom: 10),
             child: Card(
+              elevation: 10,
               color: hasUserReservation ? Colors.blue[50] : (isAvailable ? Colors.white : Colors.grey[200]),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
                 side: BorderSide(
-                  color: hasUserReservation ? Colors.blue : Colors.transparent,
-                  width: hasUserReservation ? 2 : 0,
+                  color: hasUserReservation ? Color(0xFF37F097) : Color(0xFF4A90E2),
+                  width: 2,
                 ),
               ),
               child: Padding(
@@ -232,7 +233,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                           decoration: BoxDecoration(
-                            color: hasUserReservation ? Colors.blue : const Color(0xFF1D2130),
+                            color: hasUserReservation ? const Color(0xFF37F097) : const Color(0xFF4A90E2),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
@@ -245,7 +246,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
-                              color: Colors.blue,
+                              color: const Color(0xFF37F097),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: const Text(
@@ -273,7 +274,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                           ? _getUserReservationInfo(hour)
                           : (isAvailable ? 'Lugares disponibles' : 'Sin lugares disponibles'),
                       style: TextStyle(
-                        color: hasUserReservation ? Colors.blue[700] : Colors.grey,
+                        color: hasUserReservation ? const Color(0xFF59806e) : Color(0xFF154e91),
                         fontSize: 14,
                       ),
                     ),
@@ -283,7 +284,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                       value: (availability['total'] ?? 0) > 0 ? (availability['occupied'] ?? 0) / (availability['total'] ?? 1) : 0,
                       backgroundColor: Colors.grey[300],
                       valueColor: AlwaysStoppedAnimation<Color>(
-                        hasUserReservation ? Colors.blue : (isAvailable ? Colors.green : Colors.red),
+                        hasUserReservation ? Color(0xFF37F097) : (isAvailable ? Colors.green : Colors.red),
                       ),
                     ),
                     // cancelar reserva
@@ -397,7 +398,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                     Navigator.of(context).pop(durations[key]);
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1D2130),
+                    backgroundColor: const Color(0xFF4A90E2),
                     foregroundColor: Colors.white,
                   ),
                   child: Text(key),

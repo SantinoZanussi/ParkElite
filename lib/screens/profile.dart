@@ -60,6 +60,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     if (hasError) {
       return Scaffold(
+        backgroundColor: const Color(0xFFF5F5F5),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -89,6 +90,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF5F5F5),
       body: Stack(
         children: [
           SafeArea(
@@ -96,15 +98,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
               children: [
                 Expanded(
                   child: SingleChildScrollView(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 20), // Espacio superior
-                          const ProfileContainer(),
-                          const SizedBox(height: 120), // Espacio para no tapar la navbar
-                        ],
-                      ),
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 20),
+                        const ProfileContainer(),
+                        const SizedBox(height: 120), // Espacio para no tapar la navbar
+                      ],
                     ),
                   ),
                 ),

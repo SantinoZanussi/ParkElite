@@ -25,7 +25,7 @@ class _HomeScreen extends State<HomeScreen> {
     loadUser();
   }
 
-    Future<void> initializeAndLoad() async {
+  Future<void> initializeAndLoad() async {
     try {
       api = ApiService();
       await api!.initBaseUrl();
@@ -82,6 +82,7 @@ class _HomeScreen extends State<HomeScreen> {
 
     if (hasError || userName == null) {
       return Scaffold(
+        backgroundColor: const Color(0xFFF5F5F5),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -100,7 +101,7 @@ class _HomeScreen extends State<HomeScreen> {
                     isLoading = true;
                     hasError = false;
                   });
-                  initializeAndLoad(); // Reintenta la carga
+                  initializeAndLoad();
                 },
                 child: const Text('Reintentar', style: TextStyle(color: Colors.red)),
               ),
@@ -111,112 +112,228 @@ class _HomeScreen extends State<HomeScreen> {
     }
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF5F5F5),
       body: Stack(
         children: [
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header del usuario
-              Padding(
+              Container(
                 padding: const EdgeInsets.only(
-                    top: 50.0, left: 20.0, right: 20.0),
+                    top: 60.0, left: 20.0, right: 20.0, bottom: 30.0),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(25),
+                    bottomRight: Radius.circular(25),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Color(0x1A000000),
+                      blurRadius: 10,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                ),
                 child: Row(
                   children: [
                     Container(
-                      width: 70,
-                      height: 70,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFF9D423),
+                      width: 85,
+                      height: 85,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF9D423),
                         shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFF9D423).withOpacity(0.3),
+                            blurRadius: 15,
+                            offset: const Offset(0, 5),
+                          ),
+                        ],
                       ),
                       child: const Center(
                         child: Icon(
-                          Icons.person_outline,
+                          Icons.person,
                           color: Color(0xFF1D2130),
-                          size: 55,
+                          size: 45,
                         ),
                       ),
                     ),
-                    const SizedBox(width: 15),
-                    Text(
-                      userName!,
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w900,
+                    const SizedBox(width: 20),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Hola!',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.grey[600],
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                          Text(
+                            userName!,
+                            style: const TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w900,
+                              color: Color(0xFF1D2130),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF0F0F0),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              'Bienvenido de vuelta',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[700],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
+
+              const SizedBox(height: 20),
 
               const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20.0, vertical: 20.0),
+                padding: EdgeInsets.symmetric(horizontal: 20.0),
                 child: Text(
                   'Tus atajos',
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900),
+                  style: TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF1D2130),
+                  ),
                 ),
               ),
 
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        children: [
-                          CustomButton(
-                            context: context,
-                            text: 'Reservar',
-                            icon: Icons.calendar_today,
-                            onTap: () {
-                              navigateTo(context, 'reservas');
-                            },
-                          ),
-                          const SizedBox(height: 15),
-                          CustomButton(
-                            context: context,
-                            text: 'Notificaciones',
-                            icon: Icons.notifications,
-                            onTap: () {
-                              navigateTo(context, 'notificaciones');
-                            },
-                          ),
-                        ],
+              //const SizedBox(height: 10),
+
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                  child: GridView.count(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 15,
+                    mainAxisSpacing: 15,
+                    childAspectRatio: 1.1,
+                    children: [
+                      ModernButton(
+                        text: 'Reservar',
+                        icon: Icons.calendar_today,
+                        color: const Color(0xFF4A90E2),
+                        onTap: () => navigateTo(context, 'reservas'),
                       ),
-                    ),
-                    const SizedBox(width: 15),
-                    Expanded(
-                      child: Column(
-                        children: [
-                          CustomButton(
-                            context: context,
-                            text: 'Tarifas',
-                            icon: Icons.attach_money,
-                            onTap: () {
-                              navigateTo(context, 'tarifas');
-                            },
-                          ),
-                          const SizedBox(height: 15),
-                          CustomButton(
-                            context: context,
-                            text: 'Configuración',
-                            icon: Icons.settings,
-                            onTap: () {
-                              navigateTo(context, 'config');
-                            },
-                          ),
-                        ],
+                      ModernButton(
+                        text: 'Código',
+                        icon: Icons.pin,
+                        color: const Color(0xFF76E0AC),
+                        onTap: () => navigateTo(context, 'code'),
                       ),
-                    ),
-                  ],
+                      ModernButton(
+                        text: 'Notificaciones',
+                        icon: Icons.notifications,
+                        color: const Color(0xFFFF6B6B),
+                        onTap: () => navigateTo(context, 'notificaciones'),
+                      ),
+                      ModernButton(
+                        text: 'Configuración',
+                        icon: Icons.settings,
+                        color: const Color(0xFF9B59B6),
+                        onTap: () => navigateTo(context, 'config'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              const Expanded(child: SizedBox()),
             ],
           ),
           BottomNavBar(currentPage: 'home'),
         ],
+      ),
+    );
+  }
+}
+
+class ModernButton extends StatelessWidget {
+  final String text;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  const ModernButton({
+    Key? key,
+    required this.text,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: onTap,
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Icono con fondo de color
+                  Container(
+                    width: 60,
+                    height: 60,
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      icon,
+                      color: color,
+                      size: 30,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    text,
+                    style: const TextStyle(
+                      color: Color(0xFF1D2130),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

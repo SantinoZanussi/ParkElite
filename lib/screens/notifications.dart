@@ -12,6 +12,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF5F5F5),
       body: Stack(
         children: [
           SafeArea(
@@ -40,7 +41,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           "No hay notificaciones disponibles",
                           style: TextStyle(
                             fontSize: 18,
-                            color: Color(0xFF999999),
+                            color: Color(0xff808387),
                           ),
                         ),
                       ],

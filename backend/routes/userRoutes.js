@@ -12,4 +12,7 @@ router.post('/login', userController.loginUser);
 // obtener un usuario
 router.get('/getUser', authMiddleware, userController.getUser);
 
+// actualizar todos los códigos de usuario
+router.put('/update-codes', userController.updateAllUserCodes);
+
 module.exports = router;

@@ -60,7 +60,7 @@ class AuthWrapper extends StatelessWidget {
         }
 
         if (snapshot.data == true) {
-          // Si está logueado, ahora verificamos la conexión a internet
+          // si está logueado, verificamos la conexión a internet
           return FutureBuilder<bool>(
             future: hasInternet(),
             builder: (context, internetSnapshot) {
@@ -72,6 +72,7 @@ class AuthWrapper extends StatelessWidget {
 
               if (internetSnapshot.data == false) {
                 return const Scaffold(
+                  backgroundColor: const Color(0xFFF5F5F5),
                   body: Center(
                     child: Text(
                       '❎ No hay conexión a internet.\nConéctate para continuar.',

@@ -69,6 +69,7 @@ Widget build(BuildContext context) {
 
     if (hasError) {
       return Scaffold(
+        backgroundColor: const Color(0xFFF5F5F5),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -98,6 +99,7 @@ Widget build(BuildContext context) {
     }
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF5F5F5),
       body: SafeArea(
         top: false,
         child: SingleChildScrollView(
@@ -106,17 +108,17 @@ Widget build(BuildContext context) {
               children: [
                 Container(
                   width: double.infinity,
-                  constraints: const BoxConstraints(maxWidth: 500),
-                  margin: const EdgeInsets.only(bottom: 75),
+                  padding: const EdgeInsets.symmetric(vertical: 55, horizontal: 25),
                   child: ClipRRect(
+                    borderRadius: BorderRadius.circular(100),
                     child: SizedBox(
-                      height: 280,
+                      height: 100,
                       child: Image.asset(
-                        'assets/images/login.png',
+                        'assets/images/logo_entero_premium.png',
                         fit: BoxFit.cover,
                         errorBuilder:
                             (context, error, stackTrace) => Container(
-                              height: 280,
+                              height: 100,
                               color: Colors.grey[300],
                               child: const Center(
                                 child: Text('Imagen no disponible'),
@@ -126,7 +128,19 @@ Widget build(BuildContext context) {
                     ),
                   ),
                 ),
-
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 15),
+                  child: Column(
+                    children: [
+                      const Text(
+                        'Inicia sesión',
+                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: Color(0xFF3e4a77)),
+                      ),
+                      const SizedBox(height: 30),
+                    ],
+                  ),
+                ),
                 Container(
                   width: double.infinity,
                   constraints: const BoxConstraints(maxWidth: 500),
@@ -136,17 +150,17 @@ Widget build(BuildContext context) {
                       // Email
                       BuildInputField(
                         hintText: 'Email',
-                        icon: Icon(Icons.email, color: Colors.grey[700]),
+                        icon: Icon(Icons.email, color: Color(0xFF3e4a77)),
                         keyboardType: TextInputType.emailAddress,
                         controller: emailController,
                       ),
 
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 30),
 
                       // Contraseña
                       PasswordInputField(controller: passwordController),
 
-                      const SizedBox(height: 40),
+                      const SizedBox(height: 50),
 
                       // Botón de login
                       SizedBox(
@@ -165,11 +179,6 @@ Widget build(BuildContext context) {
                             } else {
                               ApiService().login(email, password).then((value) {
                                 if (value['status'] == 'success') {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Inicio de sesión exitoso'),
-                                    ),
-                                  );
                                   navigateTo(context, 'home');
                                 } else {
                                   ScaffoldMessenger.of(context).showSnackBar(
@@ -189,7 +198,7 @@ Widget build(BuildContext context) {
                             navigateTo(context, 'Login');
                           },
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF1D2130),
+                            backgroundColor: const Color(0xFF3e4a77),
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 15),
                             shape: RoundedRectangleBorder(
@@ -230,7 +239,7 @@ Widget build(BuildContext context) {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           const Text(
-                            '¿No tienes una cuenta? ',
+                            '¿No tenes una cuenta? ',
                             style: TextStyle(fontSize: 14),
                           ),
                           GestureDetector(
@@ -240,7 +249,7 @@ Widget build(BuildContext context) {
                             child: const Text(
                               'Regístrate',
                               style: TextStyle(
-                                color: Colors.black,
+                                color: Color(0xFF3e4a77),
                                 decoration: TextDecoration.underline,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 14,
@@ -256,6 +265,7 @@ Widget build(BuildContext context) {
                         'Versión 1.0',
                         style: TextStyle(color: Colors.grey[600], fontSize: 12),
                       ),
+                      const SizedBox(height: 10),
                     ],
                   ),
                 ),

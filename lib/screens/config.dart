@@ -65,6 +65,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
 
     if (hasError) {
       return Scaffold(
+        backgroundColor: const Color(0xFFF5F5F5),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -94,7 +95,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
     }
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF5F5F5),
       body: Stack(
         children: [
           Column(
@@ -113,7 +114,6 @@ class _ConfigScreenState extends State<ConfigScreen> {
                 ),
               ),
 
-              // Shortcuts grid - Con tamaño fijo y ubicación exacta
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20.0),
                 child: Row(
@@ -140,37 +140,16 @@ class _ConfigScreenState extends State<ConfigScreen> {
                           const SizedBox(height: 20),
                           ConfigCustomButton(
                             context: context,
-                            text: 'WhatsApp',
-                            icon: Icons.whatshot,
-                            onTap: () {
-                              //navigateTo(context, 'notificaciones');
-                            },
-                          ),
-                          const SizedBox(height: 20),
-                          ConfigCustomButton(
-                            context: context,
-                            text: 'Desarrolladores',
+                            text: 'Desarrolladores (no hecho)',
                             icon: Icons.code,
                             onTap: () async {
                               try {
-                              //final api = ApiService();
-                              //await api.getUser();
                               //navigateTo(context, 'backLogin');             
                               } catch (e) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Error al asdasd')),
+                                  SnackBar(content: Text('Error al cargar desarrolladores')),
                                 );
                               }
-                              //navigateTo(context, 'tarifas');
-                            },
-                          ),
-                          const SizedBox(height: 20),
-                          ConfigCustomButton(
-                            context: context,
-                            text: '???',
-                            icon: Icons.copyright,
-                            onTap: () {
-                              //navigateTo(context, 'contacto');
                             },
                           ),
                         ],
@@ -181,8 +160,6 @@ class _ConfigScreenState extends State<ConfigScreen> {
                   ],
                 ),
               ),
-
-              // Empty space - El resto queda en blanco
               const Expanded(child: SizedBox()),
             ],
           ),

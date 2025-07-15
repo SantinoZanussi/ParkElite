@@ -2,6 +2,7 @@ const { mongoose } = require('mongoose');
 const User = require('../models/user');
 const moment = require('moment');
 const jwt = require('jsonwebtoken');
+const { actualizarCodigosUsuarios, createCode } = require('../scripts/updateCodes');
 const SECRET_KEY = process.env.JWT_SECRET || 1234567890;
 
 // login
@@ -76,12 +77,15 @@ exports.createUser = async (req, res) => {
     }
 }
 
-async function createCode() {
-    const code = Math.floor(100000 + Math.random() * 900000);
-    const existingUser = await User.findOne({ code: code });
-    if (existingUser) {
-        return createCode();
+exports.updateAllUserCodes = async (req, res) => {
+    try {
+        actualizarCodigosUsuarios().then(() => {
+            return res.status(200).json({ message: 'Códigos actualizados correctamente' });
+        }).catch(err => {
+            return res.status(500).json({ message: 'Error al actualizar códigos' });
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al actualizar códigos' });
     }
-
-    return code;
 }

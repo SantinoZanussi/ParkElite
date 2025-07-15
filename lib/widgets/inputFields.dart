@@ -19,7 +19,16 @@ import 'package:flutter/material.dart';
     @override
     Widget build(BuildContext context) {
       return Container(
-        decoration: BoxDecoration(borderRadius: BorderRadius.circular(15)),
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(15), 
+          boxShadow: [
+            BoxShadow(
+              color: Color(0xFF3e4a77).withOpacity(0.8),
+              spreadRadius: 0.5,
+              blurRadius: 13,
+              offset: const Offset(0, 3),
+            ),
+          ]
+        ),
         child: TextField(
           controller: controller,
           keyboardType: keyboardType,
@@ -35,15 +44,7 @@ import 'package:flutter/material.dart';
             ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(15),
-              borderSide: const BorderSide(color: Color(0xFFDDDDDD), width: 1),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(15),
-              borderSide: const BorderSide(color: Color(0xFFDDDDDD), width: 1),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(15),
-              borderSide: const BorderSide(color: Color(0xFFDDDDDD), width: 1),
+              borderSide: const BorderSide(color: Color(0xFFDDDDDD), width: 0.05),
             ),
             suffixIcon: icon,
           ),
@@ -80,7 +81,7 @@ import 'package:flutter/material.dart';
             _obscurePassword
                 ? Icons.remove_red_eye
                 : Icons.remove_red_eye_outlined,
-            color: Colors.grey[700],
+            color: Color(0xFF3e4a77),
           ),
         ),
       );
@@ -117,7 +118,7 @@ class _PasswordRegisterInputFieldState
           _obscurePassword
               ? Icons.remove_red_eye
               : Icons.remove_red_eye_outlined,
-          color: Colors.grey[700],
+          color: Color(0xFF3e4a77),
         ),
       ),
     );

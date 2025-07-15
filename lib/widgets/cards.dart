@@ -77,7 +77,7 @@ class ConfigCustomButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.15),
+              color: const Color(0xFF9B59B6).withOpacity(0.15),
               spreadRadius: 0,
               blurRadius: 12,
               offset: const Offset(0, 0),
@@ -90,7 +90,7 @@ class ConfigCustomButton extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.start,
           crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Icon(icon, color: const Color(0xFF1D2130), size: 30),
+              Icon(icon, color: const Color(0xFF9B59B6), size: 30),
               const SizedBox(width: 20),
               Text(
                 text,

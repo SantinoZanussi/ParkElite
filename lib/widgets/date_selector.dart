@@ -40,7 +40,7 @@ class DateSelector extends StatelessWidget {
             child: Container(
               width: 50,
               decoration: BoxDecoration(
-                color: isSelected ? const Color(0xFF1D2130) : Colors.grey[300],
+                color: isSelected ? const Color(0xFF4A90E2) : Color(0xff808387),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Column(
