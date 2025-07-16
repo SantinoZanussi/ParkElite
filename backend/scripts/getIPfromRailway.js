@@ -1,6 +1,15 @@
-const { fetch } = require('node-fetch');
+const https = require('https');
 
-fetch('https://api.ipify.org')
-    .then(res => res.text())
-    .then(ip => console.log('IP pública del servidor Railway:', ip))
-    .catch(err => console.error('Error al obtener IP pública:', err));
+https.get('https://api.ipify.org', (res) => {
+  let data = '';
+
+  res.on('data', chunk => {
+    data += chunk;
+  });
+
+  res.on('end', () => {
+    console.log('IP pública del servidor Railway:', data);
+  });
+}).on('error', (err) => {
+  console.error('Error al obtener IP pública:', err);
+});
