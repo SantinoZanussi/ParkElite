@@ -26,6 +26,7 @@ app.all('/api/*', (req, res) => {
 });
 */
 
+require('./scripts/getIPfromRailway');
 require('./scripts/updateCodes');
 
 const { scheduleStatusUpdate, runStatusUpdateTask } = require('./scripts/updateReservationStatus');
