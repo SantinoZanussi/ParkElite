@@ -13,7 +13,7 @@ class ApiService {
   
   final String localNetworkIP = "192.168.0.24";
   final String localNetworkIPEscuela = "192.168.2.165";
-  final String railwayNetworkIP = "162.220.234.78";
+  final String railwayNetworkDomain = "parkelite-production.up.railway.app";
   late final String baseUrl;
   bool _isInitialized = false;
 
@@ -28,9 +28,9 @@ class ApiService {
 
       baseUrl = isEmulator
           ? 'http://10.0.2.2:3000/api' // Emulador Android
-          : 'http://$railwayNetworkIP:3000/api'; // Dispositivo físico Android
+          : 'https://$railwayNetworkDomain/api'; // Dispositivo físico Android
     } else {
-      baseUrl = 'http://$railwayNetworkIP:3000/api'; // iOS físico o emulador
+      baseUrl = 'https://$railwayNetworkDomain/api'; // iOS físico o emulador
     }
     
     _isInitialized = true;
