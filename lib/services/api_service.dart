@@ -13,7 +13,7 @@ class ApiService {
   
   final String localNetworkIP = "192.168.0.24";
   final String localNetworkIPEscuela = "192.168.2.165";
-  final String railwayNetworkIP = "162.220.234.67";
+  final String railwayNetworkIP = "162.220.234.78";
   late final String baseUrl;
   bool _isInitialized = false;
 
