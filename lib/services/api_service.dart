@@ -224,9 +224,9 @@ class ApiService {
       final token = await getToken();
       
       final queryParams = {
-        'date': date.toIso8601String(),
-        'startTime': startTime.toIso8601String(),
-        'endTime': endTime.toIso8601String(),
+        'date': date.toUtc().toIso8601String(),
+        'startTime': startTime.toUtc().toIso8601String(),
+        'endTime': endTime.toUtc().toIso8601String(),
       };
       
       final uri = Uri.parse('$baseUrl/reservas/available-spots').replace(queryParameters: queryParams);
@@ -285,7 +285,7 @@ class ApiService {
       final token = await getToken();
       
       final queryParams = {
-        'date': date.toIso8601String(),
+        'date': date.toUtc().toIso8601String(),
       };
       
       final uri = Uri.parse('$baseUrl/reservas/occupancy-stats').replace(queryParameters: queryParams);

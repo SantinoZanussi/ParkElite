@@ -5,7 +5,7 @@ const User = require('../models/user');
 // actualiza reservas a completadas
 exports.updateCompletedReservations = async (req, res) => {
   try {
-    const now = new Date();
+    const now = new Date().toISOString();
     const completedReservations = await Reservation.updateMany(
       {
         endTime: { $lt: now },
@@ -70,6 +70,12 @@ exports.getUserReservations = async (req, res) => {
 
 exports.createReservation = async (req, res) => {
   const { startTime, endTime, reservationDate } = req.body;
+  //console.log("📥 startTime en 'createReservation' recibido:", startTime);
+  //console.log("📥 Interpretado como fecha:", new Date(startTime).toISOString());
+  //console.log("📥 endTime en 'createReservation' recibido:", endTime);
+  //console.log("📥 Interpretado como fecha:", new Date(endTime).toISOString());
+  //console.log("📥 reservationDate en 'createReservation' recibido:", reservationDate);
+  //console.log("📥 Interpretado como fecha:", new Date(reservationDate).toISOString());
 
   try {
     const userInfo = await User.findOne({ userId: req.user.id });
@@ -82,13 +88,20 @@ exports.createReservation = async (req, res) => {
       });
     }
 
+    const year = dateObj.getUTCFullYear();
+    const month = dateObj.getUTCMonth();
+    const day = dateObj.getUTCDate();
+
+    const startDay = new Date(Date.UTC(year, month, day, 0, 0, 0));
+    const endDay = new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
+
     // si el usuario ya tiene una reserva para ese día
     const existingReservation = await Reservation.findOne({
       userId: req.user.id,
       code: userInfo.code,
       reservationDate: {
-        $gte: new Date(dateObj.setHours(0, 0, 0, 0)),
-        $lt: new Date(dateObj.setHours(23, 59, 59, 999))
+        $gte: startDay,
+        $lt: endDay
       },
       status: { $ne: 'cancelado' }
     });
@@ -111,9 +124,9 @@ exports.createReservation = async (req, res) => {
       userId: req.user.id,
       code: userInfo.code,
       parkingSpotId: availableSpot._id,
-      startTime: new Date(startTime),
-      endTime: new Date(endTime),
-      reservationDate: new Date(reservationDate)
+      startTime: new Date(startTime).toISOString(),
+      endTime: new Date(endTime).toISOString(),
+      reservationDate: new Date(reservationDate).toISOString()
     });
 
     await reservation.save();
@@ -215,8 +228,17 @@ exports.getOccupancyStats = async (req, res) => {
 
   try {
     const dateObj = new Date(date);
-    const startOfDay = new Date(dateObj.setHours(0, 0, 0, 0));
-    const endOfDay = new Date(dateObj.setHours(23, 59, 59, 999));
+    const year = dateObj.getUTCFullYear();
+    const month = dateObj.getUTCMonth();
+    const day = dateObj.getUTCDate();
+    const startOfDay = new Date(Date.UTC(year, month, day, 0, 0, 0));
+    const endOfDay = new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
+
+    //console.log("📥 startOfDay recibido:", startOfDay);
+    //console.log("📥 Interpretado en 'getOcuppancyStats' como fecha:", new Date(startOfDay).toISOString());
+    //console.log("📥 endOfDay en 'getOcuppancyStats' recibido:", endOfDay);
+    //console.log("📥 Interpretado como fecha:", new Date(endOfDay).toISOString());
+
 
     // obtener todas las reservas del día
     const reservations = await Reservation.find({
@@ -230,8 +252,8 @@ exports.getOccupancyStats = async (req, res) => {
     // calcular estadísticas por cada hora del día
     const hourlyStats = [];
     for (let hour = 6; hour < 22; hour++) { // 6 AM a 10 PM
-      const hourStart = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), hour, 0, 0);
-      const hourEnd = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), hour + 1, 0, 0);
+      const hourStart = new Date(Date.UTC(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), hour, 0, 0));
+      const hourEnd = new Date(Date.UTC(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), hour + 1, 0, 0));
       
       const occupiedSpots = reservations.filter(reservation => {
         return reservation.startTime < hourEnd && reservation.endTime > hourStart;
@@ -320,8 +342,20 @@ async function findAvailableSpot(date, startTime, endTime) {
 
 async function checkSpotAvailability(spotId, date, startTime, endTime) {
   const dateObj = new Date(date);
-  const startOfDay = new Date(dateObj.setHours(0, 0, 0, 0));
-  const endOfDay = new Date(dateObj.setHours(23, 59, 59, 999));
+  const year = dateObj.getUTCFullYear();
+  const month = dateObj.getUTCMonth();
+  const day = dateObj.getUTCDate();
+  const startOfDay = new Date(Date.UTC(year, month, day, 0, 0, 0));
+  const endOfDay = new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
+
+  //console.log("📥 startTime en 'checkSpotAvailability' recibido:", startTime);
+  //console.log("📥 Interpretado como fecha:", new Date(startTime).toISOString());
+  //console.log("📥 endTime en 'checkSpotAvailability' recibido:", endTime);
+  //console.log("📥 Interpretado como fecha:", new Date(endTime).toISOString());
+  //console.log("📥 startOfDay recibido:", startOfDay);
+  //console.log("📥 Interpretado en 'checkSpotAvailability' como fecha:", new Date(startOfDay).toISOString());
+  //console.log("📥 endOfDay en 'checkSpotAvailability' recibido:", endOfDay);
+  //console.log("📥 Interpretado como fecha:", new Date(endOfDay).toISOString());
 
   const conflictingReservations = await Reservation.countDocuments({
     parkingSpotId: spotId,

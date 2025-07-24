@@ -54,8 +54,20 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     try {
       final selectedDate = DateTime(currentDate.year, currentDate.month, selectedDay);
       final stats = await apiService.getOccupancyStats(selectedDate);
+
+      final localStats = stats.map((stat) {
+      final utcHour = stat['hour'];
+      final localHour = DateTime.utc(2025, 1, 1, utcHour).toLocal().hour;
+      return {
+        'hour': localHour,
+        'occupied': stat['occupied'],
+        'available': stat['available'],
+        'total': stat['total'],
+      };
+
+    }).toList();
       setState(() {
-        occupancyStats = stats;
+        occupancyStats = localStats;
       });
     } catch (e) {
       print('Error al cargar estadísticas: $e');
@@ -329,8 +341,11 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     
     return userReservations.any((reservation) {
       final reservationDate = DateTime.parse(reservation['reservationDate']).toLocal();
+      //print('📥 reservationDate en "_hasUserReservationAtHour" recibido: $reservationDate');
       final startTime = DateTime.parse(reservation['startTime']).toLocal();
+      //print('📥 startTime en "_hasUserReservationAtHour" recibido: $startTime');
       final endTime = DateTime.parse(reservation['endTime']).toLocal();
+      //print('📥 endTime en "_hasUserReservationAtHour" recibido: $endTime');
       
       // verificar si es el mismo día
       if (reservationDate.year != selectedDate.year ||
