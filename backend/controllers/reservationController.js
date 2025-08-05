@@ -276,8 +276,7 @@ exports.getOccupancyStats = async (req, res) => {
 
 exports.confirm_arrival = async (req, res) => {
   console.log('Confirming arrival...');
-  console.log(req);
-  const reservationId = req.body.reservationId;
+  const reservationId = req.params.reservationId;
   const reservation = await Reservation.findOne({
     _id: reservationId,
     status: { $nin: ['cancelado', 'completado'] }
