@@ -28,12 +28,15 @@ router.delete('/:reservationId', authMiddleware, reservationController.cancelRes
 router.delete('/cancel/:reservationId', reservationController.cancelSpecificReservation);
 
 // confirmar llegada
-router.post('/confirm-arrival', reservationController.confirm_arrival);
+router.post('/confirm-arrival/:reservationId', reservationController.confirm_arrival);
 
 // cancelar llegada por expiración
 router.post('/cancel-arrival', reservationController.cancel_expired);
 
 // marcar reserva como completada (por si acaso)
 router.put('/complete/:reservationId', reservationController.markReservationAsCompleted);
+
+// obtener reservas activas (ESP8266)
+router.get('/active-reservations', reservationController.getActiveReservations);
 
 module.exports = router;

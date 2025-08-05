@@ -14,20 +14,20 @@ const seedParkingSpots = async () => {
 
     const parkingSpots = [ // Espacios del estacionamiento
       {
-        spotNumber: 1,
-        name: 'Espacio 1',
-      },
-      {
-        spotNumber: 2,
-        name: 'Espacio 2',
-      },
-      {
         spotNumber: 3,
         name: 'Espacio 3',
       },
       {
         spotNumber: 4,
         name: 'Espacio 4',
+      },
+      {
+        spotNumber: 5,
+        name: 'Espacio 5',
+      },
+      {
+        spotNumber: 6,
+        name: 'Espacio 6',
       }
     ];
 
