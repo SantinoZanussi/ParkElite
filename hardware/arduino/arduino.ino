@@ -20,11 +20,20 @@ SoftwareSerial espSerial(0, 1); // RX, TX hacia el ESP8266
 Servo barrera;
 
 // Variables para control de ocupación
-unsigned long tiempoDeteccion[4] = {0, 0, 0, 0}; // Tiempo cuando se detectó ocupación en cada sensor
-bool estadoAnterior[4] = {false, false, false, false}; // Estado anterior de cada sensor
-bool ocupacionConfirmada[4] = {false, false, false, false}; // Si ya se confirmó la ocupación
-const unsigned long TIEMPO_CONFIRMACION = 60000; // 1 minuto en milisegundos
-const int DISTANCIA_OCUPADO = 20; // Distancia en cm para considerar ocupado
+unsigned long tiempoDeteccion[4] = {0, 0, 0, 0};
+bool estadoAnterior[4] = {false, false, false, false};
+bool ocupacionConfirmada[4] = {false, false, false, false};
+const unsigned long TIEMPO_CONFIRMACION = 60000; // 1 minuto
+const int DISTANCIA_OCUPADO = 20; // cm
+
+// Variables para heartbeat y comunicación
+unsigned long lastHeartbeat = 0;
+const unsigned long HEARTBEAT_INTERVAL = 30000; // 30 segundos
+bool espConnected = false;
+unsigned long lastEspResponse = 0;
+
+// Mapeo de sensores físicos a plazas de BD
+const int SENSOR_TO_SPOT[4] = {3, 4, 5, 6}; // Sensor 0->Plaza 3, etc.
 
 void setup() {
   Serial.begin(9600);
@@ -32,42 +41,60 @@ void setup() {
   barrera.attach(SERVO_PIN);
   barrera.write(0); // Barrera cerrada
 
-  //pines sensores ultrasónicos
+  // Configurar pines sensores
   pinMode(TRIG1_PIN, OUTPUT);
   pinMode(ECHO1_PIN, INPUT);
-  
   pinMode(TRIG2_PIN, OUTPUT);
   pinMode(ECHO2_PIN, INPUT);
-  
   pinMode(TRIG3_PIN, OUTPUT);
   pinMode(ECHO3_PIN, INPUT);
-  
   pinMode(TRIG4_PIN, OUTPUT);
   pinMode(ECHO4_PIN, INPUT);
 
-  Serial.println("Listo. Esperando orden...");
+  Serial.println("Arduino iniciado. Esperando ESP8266...");
+  
+  // Enviar estado inicial después de un breve delay
+  delay(3000);
+  enviarEstadoInicial();
 }
 
 void loop() {
-  // Leer si llega orden del ESP
+  procesarComandosESP();
+  verificarOcupacion();
+  enviarHeartbeat();
+  
+  delay(500);
+}
+
+void procesarComandosESP() {
   if (espSerial.available()) {
     String orden = espSerial.readStringUntil('\n');
     orden.trim();
     Serial.println("ESP → " + orden);
+    
     if (orden == "ABRIR") {
       abrirBarrera();
-    } else if (orden == "CONSULTAR_OCUPACION") {
+      espSerial.println("BARRERA_ABIERTA");
+    } 
+    else if (orden == "CONSULTAR_OCUPACION") {
       enviarEstadoOcupacion();
     }
+    else if (orden == "PING") {
+      espSerial.println("PONG");
+      espConnected = true;
+      lastEspResponse = millis();
+    }
+    else if (orden == "STATUS_REQUEST") {
+      enviarEstadoCompleto();
+    }
+    else if (orden == "RESET_SENSORS") {
+      resetearSensores();
+    }
   }
-
-  // Verificar ocupación en cada sensor
-  verificarOcupacion();
-  
-  delay(500); // Reducido para mejor responsividad
 }
 
 void abrirBarrera() {
+  Serial.println("Abriendo barrera...");
   barrera.write(90); // Abrir
   delay(5000);       // Tiempo para pasar
   barrera.write(0);  // Cerrar
@@ -93,25 +120,33 @@ void verificarOcupacion() {
     if (ocupadoAhora && !estadoAnterior[i]) {
       tiempoDeteccion[i] = millis();
       ocupacionConfirmada[i] = false;
-      Serial.print("SENSOR_");
-      Serial.print(i + 1);
-      Serial.println("_DETECTANDO");
+      
+      // Enviar detección inmediata al ESP
+      String msg = "SENSOR_DETECTING:" + String(SENSOR_TO_SPOT[i]);
+      espSerial.println(msg);
+      Serial.println("Detectando en plaza " + String(SENSOR_TO_SPOT[i]));
     }
     
     // Si está ocupado y ha pasado el tiempo de confirmación
     if (ocupadoAhora && !ocupacionConfirmada[i] && 
         (millis() - tiempoDeteccion[i] >= TIEMPO_CONFIRMACION)) {
       ocupacionConfirmada[i] = true;
-      Serial.print("OCUPACION_CONFIRMADA_");
-      Serial.println(i + 1); // Envía número de plaza (1-4)
+      
+      // Enviar confirmación al ESP con número de plaza de BD
+      String msg = "OCUPACION_CONFIRMADA:" + String(SENSOR_TO_SPOT[i]);
+      espSerial.println(msg);
+      Serial.println("Ocupación confirmada en plaza " + String(SENSOR_TO_SPOT[i]));
     }
     
     // Si cambió de ocupado a libre
     if (!ocupadoAhora && estadoAnterior[i]) {
       ocupacionConfirmada[i] = false;
       tiempoDeteccion[i] = 0;
-      Serial.print("LIBERADO_");
-      Serial.println(i + 1);
+      
+      // Enviar liberación al ESP
+      String msg = "LIBERADO:" + String(SENSOR_TO_SPOT[i]);
+      espSerial.println(msg);
+      Serial.println("Plaza " + String(SENSOR_TO_SPOT[i]) + " liberada");
     }
     
     estadoAnterior[i] = ocupadoAhora;
@@ -119,23 +154,77 @@ void verificarOcupacion() {
 }
 
 void enviarEstadoOcupacion() {
-  espSerial.print("ESTADO_OCUPACION:");
+  String estado = "ESTADO_OCUPACION:";
   for (int i = 0; i < 4; i++) {
-    espSerial.print(ocupacionConfirmada[i] ? "1" : "0");
-    if (i < 3) Serial.print(",");
+    estado += (ocupacionConfirmada[i] ? "1" : "0");
+    if (i < 3) estado += ",";
   }
-  espSerial.println();
-  Serial.println("→ Enviado a ESP: ESTADO_OCUPACION");
+  estado += ":" + String(SENSOR_TO_SPOT[0]) + "," + String(SENSOR_TO_SPOT[1]) + "," + 
+            String(SENSOR_TO_SPOT[2]) + "," + String(SENSOR_TO_SPOT[3]);
+  
+  espSerial.println(estado);
+  Serial.println("Estado enviado al ESP: " + estado);
 }
 
-bool detectarAuto() {
-  return (distanciaSensor(ECHO1_PIN, TRIG1_PIN) < DISTANCIA_OCUPADO) ||
-         (distanciaSensor(ECHO2_PIN, TRIG2_PIN) < DISTANCIA_OCUPADO) ||
-         (distanciaSensor(ECHO3_PIN, TRIG3_PIN) < DISTANCIA_OCUPADO) ||
-         (distanciaSensor(ECHO4_PIN, TRIG4_PIN) < DISTANCIA_OCUPADO);
+void enviarEstadoInicial() {
+  Serial.println("Enviando estado inicial al ESP8266...");
+  espSerial.println("ARDUINO_READY");
+  delay(1000);
+  enviarEstadoOcupacion();
+  delay(500);
+  enviarEstadoCompleto();
 }
 
-// Función para medir distancia en cm de un sensor ultrasónico
+void enviarEstadoCompleto() {
+  String status = "SYSTEM_STATUS:";
+  status += "SENSORS_OK:";
+  
+  // Verificar cada sensor
+  for (int i = 0; i < 4; i++) {
+    int echoPin, trigPin;
+    switch (i) {
+      case 0: echoPin = ECHO1_PIN; trigPin = TRIG1_PIN; break;
+      case 1: echoPin = ECHO2_PIN; trigPin = TRIG2_PIN; break;
+      case 2: echoPin = ECHO3_PIN; trigPin = TRIG3_PIN; break;
+      case 3: echoPin = ECHO4_PIN; trigPin = TRIG4_PIN; break;
+    }
+    
+    long dist = distanciaSensor(echoPin, trigPin);
+    bool sensorOk = (dist > 0 && dist < 400); // Rango válido
+    status += (sensorOk ? "1" : "0");
+    if (i < 3) status += ",";
+  }
+  
+  status += ":BARRIER_OK:1"; // Asumir barrera OK
+  espSerial.println(status);
+  Serial.println("Estado completo enviado");
+}
+
+void resetearSensores() {
+  Serial.println("Reseteando sensores...");
+  for (int i = 0; i < 4; i++) {
+    tiempoDeteccion[i] = 0;
+    estadoAnterior[i] = false;
+    ocupacionConfirmada[i] = false;
+  }
+  espSerial.println("SENSORS_RESET_OK");
+  Serial.println("Sensores reseteados");
+}
+
+void enviarHeartbeat() {
+  if (millis() - lastHeartbeat > HEARTBEAT_INTERVAL) {
+    espSerial.println("HEARTBEAT:" + String(millis()));
+    Serial.println("Heartbeat enviado");
+    lastHeartbeat = millis();
+    
+    // Si no hay respuesta del ESP en mucho tiempo
+    if (millis() - lastEspResponse > 60000) {
+      espConnected = false;
+      Serial.println("⚠️ ESP8266 no responde");
+    }
+  }
+}
+
 long distanciaSensor(int echoPin, int trigPin) {
   long duracion, distancia;
 
@@ -145,8 +234,8 @@ long distanciaSensor(int echoPin, int trigPin) {
   delayMicroseconds(10);
   digitalWrite(trigPin, LOW);
 
-  duracion = pulseIn(echoPin, HIGH, 30000); // timeout 30ms para evitar bloqueo
-  if (duracion == 0) return 999; // Si timeout devuelve un valor grande (no detectado)
+  duracion = pulseIn(echoPin, HIGH, 30000); // timeout 30ms
+  if (duracion == 0) return 999; // timeout
   
   distancia = duracion * 0.034 / 2;
   return distancia;
