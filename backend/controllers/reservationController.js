@@ -320,6 +320,67 @@ exports.checkCodeUser = async (req, res) => {
   }
 }
 
+exports.getActiveReservations = async (req, res) => {
+  try {
+    await exports.updateCompletedReservations();
+    
+    const now = new Date();
+    const nowUTC = new Date(now.toISOString());
+    
+    const today = new Date();
+    const year = today.getUTCFullYear();
+    const month = today.getUTCMonth();
+    const day = today.getUTCDate();
+    
+    const startOfDay = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+    const endOfDay = new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
+    
+    console.log("🕐 Tiempo actual UTC:", nowUTC.toISOString());
+    console.log("🕐 Inicio del día UTC:", startOfDay.toISOString());
+    console.log("🕐 Fin del día UTC:", endOfDay.toISOString());
+    
+    const activeReservations = await Reservation.find({
+      reservationDate: {
+        $gte: startOfDay,
+        $lt: endOfDay
+      },
+      status: { $nin: ['cancelado', 'completado'] },
+      startTime: { $lte: new Date(nowUTC.getTime() + 60 * 60 * 1000) }, // q empiecen en la próxima hora
+      endTime: { $gte: nowUTC }
+    })
+    .populate('parkingSpotId')
+    .sort({ startTime: 1 });
+    
+    console.log(`📊 Reservas activas encontradas: ${activeReservations.length}`);
+    
+    activeReservations.forEach((reservation, index) => {
+      console.log(`📋 Reserva ${index + 1}:`);
+      console.log(`   - ID: ${reservation._id}`);
+      console.log(`   - Código: ${reservation.code}`);
+      console.log(`   - Plaza: ${reservation.parkingSpotId?.spotNumber}`);
+      console.log(`   - Inicio: ${reservation.startTime.toISOString()}`);
+      console.log(`   - Fin: ${reservation.endTime.toISOString()}`);
+      console.log(`   - Fecha reserva: ${reservation.reservationDate.toISOString()}`);
+      console.log(`   - Estado: ${reservation.status}`);
+    });
+    
+    res.json({
+      success: true,
+      count: activeReservations.length,
+      serverTimeUTC: nowUTC.toISOString(),
+      reservations: activeReservations
+    });
+    
+  } catch (error) {
+    console.error('Error al obtener reservas activas:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error del servidor al obtener reservas activas',
+      reservations: []
+    });
+  }
+};
+
 async function findAvailableSpot(date, startTime, endTime) {
   // obtener todos los espacios
   const allSpots = await ParkingSpot.find({ isActive: true }).sort({ spotNumber: 1 });

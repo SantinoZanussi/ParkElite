@@ -36,4 +36,7 @@ router.post('/cancel-arrival', reservationController.cancel_expired);
 // marcar reserva como completada (por si acaso)
 router.put('/complete/:reservationId', reservationController.markReservationAsCompleted);
 
+// obtener reservas activas (ESP8266)
+router.get('/active-reservations', reservationController.getActiveReservations);
+
 module.exports = router;
