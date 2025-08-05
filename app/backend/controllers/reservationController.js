@@ -335,9 +335,9 @@ exports.getActiveReservations = async (req, res) => {
     const startOfDay = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
     const endOfDay = new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
     
-    console.log("🕐 Tiempo actual UTC:", nowUTC.toISOString());
-    console.log("🕐 Inicio del día UTC:", startOfDay.toISOString());
-    console.log("🕐 Fin del día UTC:", endOfDay.toISOString());
+    //console.log("🕐 Tiempo actual UTC:", nowUTC.toISOString());
+    //console.log("🕐 Inicio del día UTC:", startOfDay.toISOString());
+    //console.log("🕐 Fin del día UTC:", endOfDay.toISOString());
     
     const activeReservations = await Reservation.find({
       reservationDate: {
@@ -351,17 +351,17 @@ exports.getActiveReservations = async (req, res) => {
     .populate('parkingSpotId')
     .sort({ startTime: 1 });
     
-    console.log(`📊 Reservas activas encontradas: ${activeReservations.length}`);
+    //console.log(`📊 Reservas activas encontradas: ${activeReservations.length}`);
     
     activeReservations.forEach((reservation, index) => {
-      console.log(`📋 Reserva ${index + 1}:`);
-      console.log(`   - ID: ${reservation._id}`);
-      console.log(`   - Código: ${reservation.code}`);
-      console.log(`   - Plaza: ${reservation.parkingSpotId?.spotNumber}`);
-      console.log(`   - Inicio: ${reservation.startTime.toISOString()}`);
-      console.log(`   - Fin: ${reservation.endTime.toISOString()}`);
-      console.log(`   - Fecha reserva: ${reservation.reservationDate.toISOString()}`);
-      console.log(`   - Estado: ${reservation.status}`);
+      //console.log(`📋 Reserva ${index + 1}:`);
+      //console.log(`   - ID: ${reservation._id}`);
+      //console.log(`   - Código: ${reservation.code}`);
+      //console.log(`   - Plaza: ${reservation.parkingSpotId?.spotNumber}`);
+      //console.log(`   - Inicio: ${reservation.startTime.toISOString()}`);
+      //console.log(`   - Fin: ${reservation.endTime.toISOString()}`);
+      //console.log(`   - Fecha reserva: ${reservation.reservationDate.toISOString()}`);
+      //console.log(`   - Estado: ${reservation.status}`);
     });
     
     res.json({
