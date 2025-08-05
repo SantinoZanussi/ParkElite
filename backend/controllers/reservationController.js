@@ -276,7 +276,7 @@ exports.getOccupancyStats = async (req, res) => {
 
 exports.confirm_arrival = async (req, res) => {
   console.log('Confirming arrival...');
-  console.log(req.body);
+  console.log(req);
   const reservationId = req.body.reservationId;
   const reservation = await Reservation.findOne({
     _id: reservationId,
