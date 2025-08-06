@@ -1,4 +1,4 @@
-// ESP8266 Parking Controller
+// ESP8266 - ParkElite
 
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
@@ -7,26 +7,19 @@
 #include <SPI.h>
 #include <MFRC522.h>
 
-// --- CONFIGURACIÓN WIFI y API ---
+// --- CONFIGURACIÓN ---
 const char* WIFI_SSID         = "rocaysalta";
 const char* WIFI_PASSWORD     = "salta2043+";
 const char* API_HOST_DOMAIN   = "parkelite-production.up.railway.app";
-const uint16_t API_PORT_LOCAL = 3000;
 
-// Códigos de error
-#define ERROR_DATABASE_CONNECTION 1000
-#define ERROR_EMPTY_RESPONSE 1001
-
+// Endpoints API
 static const char* ENDPOINT_CHECKCODE = "/api/reservas/checkCode";
 static const char* ENDPOINT_CONFIRM_ARRIVAL = "/api/reservas/confirm-arrival";
 static const char* ENDPOINT_CANCEL_RESERVATION = "/api/reservas/cancel-arrival";
 static const char* ENDPOINT_CANCEL_SPECIFIC_RESERVATION = "/api/reservas/cancel";
 static const char* ENDPOINT_GET_ACTIVE_RESERVATIONS = "/api/reservas/active-reservations";
 
-// --- PINES ---
-#define UART_RX_PIN   3
-#define UART_TX_PIN   1
-
+// --- PINES RFID ---
 #define SS_PIN D4
 #define RST_PIN D3
 
@@ -34,16 +27,23 @@ static const char* ENDPOINT_GET_ACTIVE_RESERVATIONS = "/api/reservas/active-rese
 ESP8266WebServer server(80);
 MFRC522 mfrc522(SS_PIN, RST_PIN);
 
+// RFID autorizado
 const byte uid1[] = {0x03, 0x77, 0xFF, 0x13};
 
+// Timers
 unsigned long lastRFIDCheck = 0;
 unsigned long lastOccupancyCheck = 0;
 unsigned long lastCancelCheck = 0;
 unsigned long lastSyncCheck = 0;
+unsigned long lastArduinoHeartbeat = 0;
+unsigned long lastPingArduino = 0;
+
 const unsigned long RFID_CHECK_INTERVAL = 100;
 const unsigned long OCCUPANCY_CHECK_INTERVAL = 5000;
 const unsigned long CANCEL_CHECK_INTERVAL = 60000;
 const unsigned long SYNC_CHECK_INTERVAL = 300000;
+const unsigned long ARDUINO_TIMEOUT = 45000; // 45 segundos sin heartbeat
+const unsigned long PING_ARDUINO_INTERVAL = 30000; // Ping cada 30s
 
 struct ActiveReservation {
   String reservationId;
@@ -55,6 +55,8 @@ struct ActiveReservation {
 
 ActiveReservation activeReservations[4];
 bool spotOccupied[4] = {false, false, false, false};
+bool arduinoConnected = false;
+int spotMapping[4] = {3, 4, 5, 6}; // Mapeo físico a BD
 
 // --- PROTOTIPOS ---
 bool wifiConnect();
@@ -70,17 +72,20 @@ void checkOccupancyAndConfirm();
 void checkAndCancelExpiredReservations();
 void confirmArrival(String reservationId);
 void cancelReservation(String reservationId);
-void processOccupancyMessage(String message);
+void processArduinoMessage(String message);
 void addActiveReservation(String reservationId, int spotNumber, String userCode = "");
 void syncActiveReservations();
 void periodicSync();
 void printReservationsStatus();
+void checkArduinoConnection();
+int getSpotIndex(int spotNumber);
 
 void setup() {
   Serial.begin(115200);
   Serial1.begin(9600);
-  Serial.println("ESP8266 Parking Controller iniciando...");
+  Serial.println("ESP8266 Parking Controller v2.0 iniciando...");
 
+  // Inicializar reservas
   for (int i = 0; i < 4; i++) {
     activeReservations[i].reservationId = "";
     activeReservations[i].spotNumber = -1;
@@ -100,7 +105,19 @@ void setup() {
 
   setupWebServer();
   
-  delay(3000);
+  // Esperar conexión con Arduino
+  Serial.println("Esperando conexión con Arduino...");
+  unsigned long startWait = millis();
+  while (!arduinoConnected && millis() - startWait < 10000) {
+    handleSerial();
+    delay(100);
+  }
+  
+  if (!arduinoConnected) {
+    Serial.println("⚠️ Arduino no responde, continuando...");
+  }
+  
+  delay(2000);
   Serial.println("🔄 Iniciando sincronización inicial...");
   syncActiveReservations();
   
@@ -112,6 +129,7 @@ void loop() {
   server.handleClient();
   handleSerial();
   handleRFID();
+  checkArduinoConnection();
   
   if (millis() - lastOccupancyCheck > OCCUPANCY_CHECK_INTERVAL) {
     checkOccupancyAndConfirm();
@@ -126,7 +144,19 @@ void loop() {
   periodicSync();
 }
 
-// --- FUNCIONES ---
+void checkArduinoConnection() {
+  // enviar ping periódico
+  if (millis() - lastPingArduino > PING_ARDUINO_INTERVAL) {
+    enviarComandoArduino("PING");
+    lastPingArduino = millis();
+  }
+  
+  // timeout
+  if (arduinoConnected && millis() - lastArduinoHeartbeat > ARDUINO_TIMEOUT) {
+    arduinoConnected = false;
+    Serial.println("⚠️ Conexión con Arduino perdida");
+  }
+}
 
 bool wifiConnect() {
   WiFi.mode(WIFI_STA);
@@ -149,12 +179,27 @@ bool wifiConnect() {
 void setupWebServer() {
   server.on("/", HTTP_GET, handleRoot);
   server.on("/submit", HTTP_POST, handleCodeSubmit);
+  server.on("/status", HTTP_GET, []() {
+    String status = "{\"arduino\":";
+    status += arduinoConnected ? "true" : "false";
+    status += ",\"wifi\":";
+    status += (WiFi.status() == WL_CONNECTED) ? "true" : "false";
+    status += ",\"activeReservations\":";
+    
+    int count = 0;
+    for (int i = 0; i < 4; i++) {
+      if (activeReservations[i].reservationId.length() > 0) count++;
+    }
+    status += String(count) + "}";
+    
+    server.send(200, "application/json", status);
+  });
   server.begin();
   Serial.println("Web server iniciado");
 }
 
 void handleRoot() {
-String html = "<html><head>"
+  String html = "<html><head>"
     "<meta charset='UTF-8'>"
     "<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
     "<style>"
@@ -292,6 +337,15 @@ String html = "<html><head>"
         "line-height: 1.5;"
         "margin: 0;"
     "}"
+    ".status-indicator {"
+        "position: absolute;"
+        "top: 20px;"
+        "right: 20px;"
+        "width: 12px;"
+        "height: 12px;"
+        "border-radius: 50%;"
+        "background: " + String(arduinoConnected ? "#4caf50" : "#f44336") + ";"
+    "}"
     "@media (max-width: 480px) {"
         ".container { padding: 40px 25px; }"
         "h1 { font-size: 24px; }"
@@ -303,6 +357,7 @@ String html = "<html><head>"
     "</style>"
     "</head><body>"
     "<div class='container'>"
+        "<div class='status-indicator'></div>"
         "<div class='lock-icon'>🔐</div>"
         "<h1>Control de Acceso</h1>"
         "<p class='subtitle'>Ingrese su código de 6 dígitos para continuar</p>"
@@ -318,7 +373,7 @@ String html = "<html><head>"
             "<p><strong>🛡️ Acceso Seguro:</strong> Este sistema verifica su identidad mediante un código único de 6 dígitos.</p>"
         "</div>"
         "<div class='rfid-info'>"
-            "<p><strong>📡 RFID Activo:</strong> También puede acercar su tarjeta RFID al lector para acceso automático.</p>"
+            "<p><strong>📡 Arduino:</strong> " + String(arduinoConnected ? "Conectado ✅" : "Desconectado ❌") + "</p>"
         "</div>"
     "</div>"
     "</body></html>";
@@ -330,15 +385,13 @@ void handleCodeSubmit() {
     server.send(200, "text/html", generateResultHTML("Error", "Falta código", true));
     return;
   }
+  
   String code = server.arg("code");
 
-  // Construir JSON
   StaticJsonDocument<128> j;
   j["code"] = code;
   String payload;
   serializeJson(j, payload);
-
-  Serial.print("Payload JSON: "); Serial.println(payload);
 
   WiFiClient client;
   HTTPClient http;
@@ -349,69 +402,56 @@ void handleCodeSubmit() {
   String resp = (statusCode > 0) ? http.getString() : "";
   http.end();
 
-  Serial.print("HTTP Status: "); Serial.println(statusCode);
-  Serial.print("Respuesta JSON: "); Serial.println(resp);
-
-  if (statusCode == -1) {
-    Serial.println("Error de conexión con la base de datos");
-    server.send(200, "text/html", generateResultHTML("Error", "No se pudo conectar con la base de datos. Código de error: " + String(ERROR_DATABASE_CONNECTION), true));
-    return;
-  }
-
-  if (resp.length() == 0) {
-    Serial.println("Respuesta vacía del servidor");
-    server.send(200, "text/html", generateResultHTML("Error", "El servidor no respondió. Código de error: " + String(ERROR_EMPTY_RESPONSE), true));
+  if (statusCode <= 0) {
+    server.send(200, "text/html", generateResultHTML("Error", "No se pudo conectar con el servidor", true));
     return;
   }
 
   StaticJsonDocument<256> res;
   DeserializationError err = deserializeJson(res, resp);
   if (err) {
-    Serial.print("Error al parsear JSON: ");
-    Serial.println(err.c_str());
-    server.send(200, "text/html", generateResultHTML("Error", "Error interno al procesar la respuesta", true));
+    server.send(200, "text/html", generateResultHTML("Error", "Error interno del servidor", true));
     return;
   }
 
   bool allowed = res["allowed"];
-  int spotNumber = res.containsKey("spotNumber") ? res["spotNumber"].as<int>() : -1;
-  String reservationId = res.containsKey("reservationId") ? res["reservationId"].as<String>() : "";
+  int spotNumber = res.containsKey("spotId") ? res["spotId"].as<int>() : -1;
 
-  String cmd = allowed ? String("ABRIR") : "DENY";
-  enviarComandoArduino(cmd);
-
-  if (allowed && spotNumber > 0 && reservationId.length() > 0) {
-    addActiveReservation(reservationId, spotNumber, code);
+  if (allowed) {
+    if (arduinoConnected) {
+      enviarComandoArduino("ABRIR");
+    } else {
+      Serial.println("⚠️ Arduino desconectado, no se puede abrir barrera");
+    }
+    
+    // busca reserva activa por código
+    for (int i = 0; i < 4; i++) {
+      if (activeReservations[i].userCode == code && !activeReservations[i].confirmed) {
+        activeReservations[i].startTime = millis(); // Actualizar tiempo de llegada
+        Serial.println("Acceso concedido para reserva: " + activeReservations[i].reservationId);
+        break;
+      }
+    }
   }
 
-  String msg = allowed ? "Acceso permitido a la plaza " + String(spotNumber)
-                       : "Acceso denegado";
+  String msg = allowed ? "Acceso permitido" : "Código inválido o reserva no activa";
   server.send(200, "text/html", generateResultHTML(allowed ? "Éxito" : "Acceso denegado", msg, !allowed));
 }
 
 void handleRFID() {
-  if (millis() - lastRFIDCheck < RFID_CHECK_INTERVAL) {
-    return;
-  }
+  if (millis() - lastRFIDCheck < RFID_CHECK_INTERVAL) return;
   lastRFIDCheck = millis();
 
-  if (!mfrc522.PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial()) {
-    return;
-  }
-
-  Serial.print("RFID Tag detectado: ");
-  for (byte i = 0; i < mfrc522.uid.size; i++) {
-    Serial.print(mfrc522.uid.uidByte[i] < 0x10 ? " 0" : " ");
-    Serial.print(mfrc522.uid.uidByte[i], HEX);
-  }
-  Serial.println();
+  if (!mfrc522.PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial()) return;
 
   if (esUIDValido(mfrc522.uid.uidByte)) {
     Serial.println("✅ RFID Tag válido, enviando orden...");
-    enviarComandoArduino("ABRIR");
+    if (arduinoConnected) {
+      enviarComandoArduino("ABRIR");
+    } else {
+      Serial.println("⚠️ Arduino desconectado");
+    }
     delay(1000);
-  } else {
-    Serial.println("❌ RFID Tag no reconocido.");
   }
 
   mfrc522.PICC_HaltA();
@@ -419,16 +459,22 @@ void handleRFID() {
 }
 
 void checkOccupancyAndConfirm() {
+  if (!arduinoConnected) return;
+  
   enviarComandoArduino("CONSULTAR_OCUPACION");
   
+  // checkear confirmaciones pendientes
   for (int i = 0; i < 4; i++) {
     if (activeReservations[i].reservationId.length() > 0 && 
-        !activeReservations[i].confirmed &&
-        spotOccupied[activeReservations[i].spotNumber - 1]) {
+        !activeReservations[i].confirmed) {
       
-      confirmArrival(activeReservations[i].reservationId);
-      activeReservations[i].confirmed = true;
-      Serial.println("Llegada confirmada para reserva " + activeReservations[i].reservationId);
+      int spotIndex = getSpotIndex(activeReservations[i].spotNumber);
+      if (spotIndex >= 0 && spotOccupied[spotIndex]) {
+        confirmArrival(activeReservations[i].reservationId);
+        activeReservations[i].confirmed = true;
+        Serial.println("✅ Llegada confirmada para reserva " + activeReservations[i].reservationId + 
+                      " en plaza " + String(activeReservations[i].spotNumber));
+      }
     }
   }
 }
@@ -439,11 +485,12 @@ void checkAndCancelExpiredReservations() {
   for (int i = 0; i < 4; i++) {
     if (activeReservations[i].reservationId.length() > 0 && 
         !activeReservations[i].confirmed &&
-        (currentTime - activeReservations[i].startTime) > 1200000) {
+        (currentTime - activeReservations[i].startTime) > 1200000) { // 20 minutos
       
+      Serial.println("⏰ Cancelando reserva expirada: " + activeReservations[i].reservationId);
       cancelReservation(activeReservations[i].reservationId);
-      Serial.println("Reserva cancelada por expiración: " + activeReservations[i].reservationId);
       
+      // limpiar reserva local
       activeReservations[i].reservationId = "";
       activeReservations[i].spotNumber = -1;
       activeReservations[i].startTime = 0;
@@ -454,8 +501,6 @@ void checkAndCancelExpiredReservations() {
 }
 
 void confirmArrival(String reservationId) {
-  Serial.print("Confirmando llegada: ");
-  Serial.println(reservationId);
   WiFiClient client;
   HTTPClient http;
   String url = String("https://") + API_HOST_DOMAIN + ENDPOINT_CONFIRM_ARRIVAL + "/" + reservationId;
@@ -467,11 +512,11 @@ void confirmArrival(String reservationId) {
   
   http.begin(client, url);
   http.addHeader("Content-Type", "application/json");
+  http.setTimeout(5000);
   int statusCode = http.POST(payload);
   http.end();
   
-  Serial.print("Confirmación de llegada - Status: ");
-  Serial.println(statusCode);
+  Serial.println("Confirmación de llegada - Status: " + String(statusCode));
 }
 
 void cancelReservation(String reservationId) {
@@ -479,23 +524,17 @@ void cancelReservation(String reservationId) {
   HTTPClient http;
   String url = String("https://") + API_HOST_DOMAIN + ENDPOINT_CANCEL_SPECIFIC_RESERVATION + "/" + reservationId;
   
-  StaticJsonDocument<128> doc;
-  doc["reservationId"] = reservationId;
-  
-  String payload;
-  serializeJson(doc, payload);
-  
   http.begin(client, url);
   http.addHeader("Content-Type", "application/json");
-  int statusCode = http.POST(payload);
+  http.setTimeout(5000);
+  int statusCode = http.DELETE();
   http.end();
   
-  Serial.print("Cancelación de reserva - Status: ");
-  Serial.println(statusCode);
+  Serial.println("Cancelación de reserva - Status: " + String(statusCode));
 }
 
 void addActiveReservation(String reservationId, int spotNumber, String userCode) {
-  for (int i = 0; i < 4; i++) {
+  for (int i = 0; i < 4; i++) { // si existe
     if (activeReservations[i].reservationId == reservationId) {
       activeReservations[i].spotNumber = spotNumber;
       activeReservations[i].startTime = millis();
@@ -506,21 +545,21 @@ void addActiveReservation(String reservationId, int spotNumber, String userCode)
     }
   }
   
-  for (int i = 0; i < 4; i++) {
+  for (int i = 0; i < 4; i++) { // si no existe
     if (activeReservations[i].reservationId.length() == 0) {
       activeReservations[i].reservationId = reservationId;
       activeReservations[i].spotNumber = spotNumber;
       activeReservations[i].startTime = millis();
       activeReservations[i].confirmed = false;
       activeReservations[i].userCode = userCode;
-      Serial.println("Reserva activa agregada: " + reservationId + " - Plaza: " + String(spotNumber) + " - Código: " + userCode);
+      Serial.println("✅ Reserva activa agregada: " + reservationId + " - Plaza: " + String(spotNumber) + " - Código: " + userCode);
       break;
     }
   }
 }
 
 void syncActiveReservations() {
-  Serial.println("🔄 Sincronizando reservas activas con la base de datos...");
+  Serial.println("🔄 Sincronizando reservas activas...");
   
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("❌ WiFi desconectado, reintentando...");
@@ -536,54 +575,31 @@ void syncActiveReservations() {
   
   http.begin(client, url);
   http.addHeader("Content-Type", "application/json");
-  http.setTimeout(10000);
+  http.setTimeout(15000);
   
   int statusCode = http.GET();
   String response = (statusCode > 0) ? http.getString() : "";
   http.end();
   
-  Serial.print("Status de sincronización: ");
-  Serial.println(statusCode);
-  
   if (statusCode != 200) {
-    Serial.println("❌ Error al obtener reservas activas - Status: " + String(statusCode));
+    Serial.println("❌ Error en sincronización - Status: " + String(statusCode));
     return;
   }
   
-  if (response.length() == 0) {
-    Serial.println("❌ Respuesta vacía del servidor");
-    return;
-  }
-  
-  Serial.print("Respuesta recibida (primeros 200 chars): ");
-  Serial.println(response.substring(0, 200));
-  
-  StaticJsonDocument<1024> doc;
+  StaticJsonDocument<2048> doc;
   DeserializationError error = deserializeJson(doc, response);
   
   if (error) {
-    Serial.print("❌ Error al parsear JSON de reservas: ");
-    Serial.println(error.c_str());
+    Serial.println("❌ Error al parsear JSON de reservas: " + String(error.c_str()));
     return;
   }
   
   if (!doc["success"].as<bool>()) {
     Serial.println("❌ Respuesta del servidor indica error");
-    String message = doc["message"].as<String>();
-    if (message.length() > 0) {
-      Serial.println("Mensaje del servidor: " + message);
-    }
     return;
   }
   
-  String serverTime = doc["serverTimeUTC"].as<String>();
-  if (serverTime.length() > 0) {
-    Serial.println("🕐 Hora del servidor (UTC): " + serverTime);
-  }
-  
-  int reservationCount = doc["count"].as<int>();
-  Serial.println("📊 Reservas disponibles en servidor: " + String(reservationCount));
-  
+  // limpiar reservas actuales
   for (int i = 0; i < 4; i++) {
     activeReservations[i].reservationId = "";
     activeReservations[i].spotNumber = -1;
@@ -612,17 +628,15 @@ void syncActiveReservations() {
       activeReservations[index].confirmed = (status == "confirmado");
       activeReservations[index].userCode = userCode;
       
-      Serial.println("✅ Reserva cargada:");
-      Serial.println("   - ID: " + reservationId);
-      Serial.println("   - Código: " + userCode);
-      Serial.println("   - Plaza: " + String(spotNumber));
-      Serial.println("   - Estado: " + status);
-      
+      Serial.println("✅ Reserva cargada - ID: " + reservationId + 
+                    " | Plaza: " + String(spotNumber) + 
+                    " | Código: " + userCode + 
+                    " | Estado: " + status);
       index++;
     }
   }
   
-  Serial.println("🔄 Sincronización completada. Total reservas cargadas: " + String(index));
+  Serial.println("🔄 Sincronización completada. Reservas cargadas: " + String(index));
   printReservationsStatus();
 }
 
@@ -652,157 +666,181 @@ void printReservationsStatus() {
   if (!hasReservations) {
     Serial.println("  No hay reservas activas");
   }
+  
+  // Estado Arduino
+  Serial.println("🔌 Arduino: " + String(arduinoConnected ? "Conectado" : "Desconectado"));
+  
+  // Estado ocupación
+  Serial.print("🚗 Ocupación: [");
+  for (int i = 0; i < 4; i++) {
+    Serial.print(spotOccupied[i] ? "●" : "○");
+    if (i < 3) Serial.print(",");
+  }
+  Serial.println("] (Plazas " + String(spotMapping[0]) + "," + String(spotMapping[1]) + "," + 
+                String(spotMapping[2]) + "," + String(spotMapping[3]) + ")");
 }
 
 bool esUIDValido(byte* uid) {
-  bool esUID1 = true;
   for (byte i = 0; i < 4; i++) {
-    if (uid[i] != uid1[i]) {
-      esUID1 = false;
-      break;
-    }
+    if (uid[i] != uid1[i]) return false;
   }
-  if (esUID1) return true;
-
-  return false;
+  return true;
 }
 
 void enviarComandoArduino(String comando) {
+  if (!arduinoConnected && comando != "PING") {
+    Serial.println("⚠️ Arduino desconectado, comando ignorado: " + comando);
+    return;
+  }
+  
   Serial1.println(comando);
-  Serial.print("Comando enviado a Arduino: ");
-  Serial.println(comando);
+  Serial.println("→ Arduino: " + comando);
 }
 
 String generateResultHTML(const String& title, const String& message, bool isError) {
-      String html = "<html><head>"
-        "<meta charset='UTF-8'>"
-        "<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
-        "<style>"
-        "* { margin: 0; padding: 0; box-sizing: border-box; }"
-        "body {"
-            "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;"
-            "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"
-            "min-height: 100vh;"
-            "display: flex;"
-            "align-items: center;"
-            "justify-content: center;"
-            "padding: 20px;"
-        "}"
-        ".container {"
-            "background: rgba(255, 255, 255, 0.95);"
-            "backdrop-filter: blur(10px);"
-            "border-radius: 20px;"
-            "padding: 40px 30px;"
-            "box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);"
-            "max-width: 500px;"
-            "width: 100%;"
-            "text-align: center;"
-            "border: 1px solid rgba(255, 255, 255, 0.2);"
-        "}"
-        ".icon {"
-            "width: 80px;"
-            "height: 80px;"
-            "margin: 0 auto 20px;"
-            "border-radius: 50%;"
-            "display: flex;"
-            "align-items: center;"
-            "justify-content: center;"
-            "font-size: 40px;"
-            "font-weight: bold;"
-        "}"
-        ".icon-success {"
-            "background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);"
-            "color: white;"
-        "}"
-        ".icon-error {"
-            "background: linear-gradient(135deg, #ff6b6b 0%, #ffa500 100%);"
-            "color: white;"
-        "}"
-        "h3 {"
-            "font-size: 28px;"
-            "margin-bottom: 15px;"
-            "font-weight: 600;"
-        "}"
-        ".title-success { color: #2d5a87; }"
-        ".title-error { color: #c53030; }"
-        "p {"
-            "font-size: 16px;"
-            "line-height: 1.6;"
-            "margin-bottom: 30px;"
-            "color: #4a5568;"
-        "}"
-        ".btn {"
-            "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"
-            "color: white;"
-            "border: none;"
-            "padding: 15px 30px;"
-            "border-radius: 50px;"
-            "font-size: 16px;"
-            "font-weight: 600;"
-            "cursor: pointer;"
-            "transition: all 0.3s ease;"
-            "box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);"
-            "text-decoration: none;"
-            "display: inline-block;"
-        "}"
-        ".btn:hover {"
-            "transform: translateY(-2px);"
-            "box-shadow: 0 8px 25px rgba(102, 126, 234, 0.6);"
-        "}"
-        ".btn:active {"
-            "transform: translateY(0);"
-        "}"
-        "@media (max-width: 480px) {"
-            ".container { padding: 30px 20px; }"
-            "h3 { font-size: 24px; }"
-            "p { font-size: 14px; }"
-            ".icon { width: 60px; height: 60px; font-size: 30px; }"
-        "}"
-        "</style>"
-        "</head><body>"
-        "<div class='container'>"
-        "<div class='icon ";
-    
-    html += isError ? "icon-error'>✕" : "icon-success'>✓";
-    
-    html += "</div>"
-        "<h3 class='";
-    
-    html += isError ? "title-error" : "title-success";
-    
-    html += "'>";
-    html += title;
-    html += "</h3><p>";
-    html += message;
-    html += "</p>"
-        "<button class='btn' onclick=\"window.location.href='/';\">Volver al formulario</button>"
-        "</div></body></html>";
-        
-    return html;
+  String html = "<html><head>"
+    "<meta charset='UTF-8'>"
+    "<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
+    "<style>"
+    "* { margin: 0; padding: 0; box-sizing: border-box; }"
+    "body {"
+        "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;"
+        "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"
+        "min-height: 100vh;"
+        "display: flex;"
+        "align-items: center;"
+        "justify-content: center;"
+        "padding: 20px;"
+    "}"
+    ".container {"
+        "background: rgba(255, 255, 255, 0.95);"
+        "backdrop-filter: blur(10px);"
+        "border-radius: 20px;"
+        "padding: 40px 30px;"
+        "box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);"
+        "max-width: 500px;"
+        "width: 100%;"
+        "text-align: center;"
+        "border: 1px solid rgba(255, 255, 255, 0.2);"
+    "}"
+    ".icon {"
+        "width: 80px;"
+        "height: 80px;"
+        "margin: 0 auto 20px;"
+        "border-radius: 50%;"
+        "display: flex;"
+        "align-items: center;"
+        "justify-content: center;"
+        "font-size: 40px;"
+        "font-weight: bold;"
+    "}"
+    ".icon-success {"
+        "background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);"
+        "color: white;"
+    "}"
+    ".icon-error {"
+        "background: linear-gradient(135deg, #ff6b6b 0%, #ffa500 100%);"
+        "color: white;"
+    "}"
+    "h3 {"
+        "font-size: 28px;"
+        "margin-bottom: 15px;"
+        "font-weight: 600;"
+    "}"
+    ".title-success { color: #2d5a87; }"
+    ".title-error { color: #c53030; }"
+    "p {"
+        "font-size: 16px;"
+        "line-height: 1.6;"
+        "margin-bottom: 30px;"
+        "color: #4a5568;"
+    "}"
+    ".btn {"
+        "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"
+        "color: white;"
+        "border: none;"
+        "padding: 15px 30px;"
+        "border-radius: 50px;"
+        "font-size: 16px;"
+        "font-weight: 600;"
+        "cursor: pointer;"
+        "transition: all 0.3s ease;"
+        "box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);"
+        "text-decoration: none;"
+        "display: inline-block;"
+    "}"
+    ".btn:hover {"
+        "transform: translateY(-2px);"
+        "box-shadow: 0 8px 25px rgba(102, 126, 234, 0.6);"
+    "}"
+    "@media (max-width: 480px) {"
+        ".container { padding: 30px 20px; }"
+        "h3 { font-size: 24px; }"
+        ".icon { width: 60px; height: 60px; font-size: 30px; }"
+    "}"
+    "</style>"
+    "</head><body>"
+    "<div class='container'>";
+  
+  html += "<div class='icon " + String(isError ? "icon-error'>✕" : "icon-success'>✓") + "</div>";
+  html += "<h3 class='" + String(isError ? "title-error" : "title-success") + "'>" + title + "</h3>";
+  html += "<p>" + message + "</p>";
+  html += "<button class='btn' onclick=\"window.location.href='/';\">Volver al formulario</button>";
+  html += "</div></body></html>";
+  
+  return html;
 }
 
 void handleSerial() {
   if (!Serial1.available()) return;
+  
   String msg = Serial1.readStringUntil('\n');
   msg.trim();
-  Serial.print("Serial recv: ");
-  Serial.println(msg);
   
-  if (msg.startsWith("OCUPACION_CONFIRMADA_")) {
-    int spotNum = msg.substring(21).toInt();
-    if (spotNum >= 1 && spotNum <= 4) {
-      spotOccupied[spotNum - 1] = true;
-      Serial.println("Plaza " + String(spotNum) + " ocupada confirmada");
+  if (msg.length() == 0) return;
+  
+  Serial.println("← Arduino: " + msg);
+  processArduinoMessage(msg);
+}
+
+void processArduinoMessage(String message) {
+  if (message == "ARDUINO_READY") {
+    arduinoConnected = true;
+    lastArduinoHeartbeat = millis();
+    Serial.println("✅ Arduino conectado y listo");
+    
+    delay(500);
+    enviarComandoArduino("STATUS_REQUEST");
+  }
+  else if (message.startsWith("HEARTBEAT:")) {
+    arduinoConnected = true;
+    lastArduinoHeartbeat = millis();
+  }
+  else if (message == "PONG") {
+    arduinoConnected = true;
+    lastArduinoHeartbeat = millis();
+  }
+  else if (message == "BARRERA_ABIERTA") {
+    Serial.println("✅ Barrera abierta confirmada");
+  }
+  else if (message.startsWith("OCUPACION_CONFIRMADA:")) {
+    int spotNumber = message.substring(21).toInt();
+    int spotIndex = getSpotIndex(spotNumber);
+    if (spotIndex >= 0) {
+      spotOccupied[spotIndex] = true;
+      Serial.println("🚗 Plaza " + String(spotNumber) + " ocupada confirmada");
     }
   }
-  else if (msg.startsWith("LIBERADO_")) {
-    int spotNum = msg.substring(9).toInt();
-    if (spotNum >= 1 && spotNum <= 4) {
-      spotOccupied[spotNum - 1] = false;
-      Serial.println("Plaza " + String(spotNum) + " liberada");
+  else if (message.startsWith("LIBERADO:")) {
+    int spotNumber = message.substring(9).toInt();
+    int spotIndex = getSpotIndex(spotNumber);
+    if (spotIndex >= 0) {
+      spotOccupied[spotIndex] = false;
+      Serial.println("🅿️ Plaza " + String(spotNumber) + " liberada");
       
+      // Limpiar reserva confirmada
       for (int i = 0; i < 4; i++) {
-        if (activeReservations[i].spotNumber == spotNum && activeReservations[i].confirmed) {
+        if (activeReservations[i].spotNumber == spotNumber && activeReservations[i].confirmed) {
           Serial.println("Limpiando reserva completada: " + activeReservations[i].reservationId);
           activeReservations[i].reservationId = "";
           activeReservations[i].spotNumber = -1;
@@ -814,16 +852,43 @@ void handleSerial() {
       }
     }
   }
-  else if (msg.startsWith("ESTADO_OCUPACION:")) {
-    String estados = msg.substring(17);
-    for (int i = 0; i < 4 && i * 2 < estados.length(); i++) {
-      char estado = estados.charAt(i * 2);
-      spotOccupied[i] = (estado == '1');
+  else if (message.startsWith("SENSOR_DETECTING:")) {
+    int spotNumber = message.substring(17).toInt();
+    Serial.println("👁️ Detectando vehículo en plaza " + String(spotNumber));
+  }
+  else if (message.startsWith("ESTADO_OCUPACION:")) {
+    String data = message.substring(17);
+    int colonPos = data.indexOf(':');
+    
+    if (colonPos > 0) {
+      String estados = data.substring(0, colonPos);
+      String plazas = data.substring(colonPos + 1);
+      
+      // Actualizar estados
+      for (int i = 0; i < 4 && i * 2 < estados.length(); i++) {
+        char estado = estados.charAt(i * 2);
+        spotOccupied[i] = (estado == '1');
+      }
+      
+      Serial.println("📊 Estado ocupación actualizado: " + estados + " (Plazas: " + plazas + ")");
     }
-    Serial.println("Estado de ocupación actualizado");
   }
-  else if (msg.startsWith("SYSTEM_STATUS")) {
-    Serial.println("📊 Estado del sistema solicitado por Arduino");
-    printReservationsStatus();
+  else if (message.startsWith("SYSTEM_STATUS:")) {
+    Serial.println("🔧 Estado del sistema Arduino recibido");
   }
+  else if (message == "SENSORS_RESET_OK") {
+    Serial.println("✅ Sensores Arduino reseteados");
+  }
+  else {
+    Serial.println("🤔 Mensaje desconocido de Arduino: " + message);
+  }
+}
+
+int getSpotIndex(int spotNumber) {
+  for (int i = 0; i < 4; i++) {
+    if (spotMapping[i] == spotNumber) {
+      return i;
+    }
+  }
+  return -1; // No encontrado
 }
