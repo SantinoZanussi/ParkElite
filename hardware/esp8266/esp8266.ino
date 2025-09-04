@@ -1,4 +1,4 @@
-// ESP8266 - ParkElite
+// --- ESP8266 - ParkElite (1.0) ---
 
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
@@ -12,7 +12,7 @@ const char* WIFI_SSID         = "rocaysalta";
 const char* WIFI_PASSWORD     = "salta2043+";
 const char* API_HOST_DOMAIN   = "parkelite-production.up.railway.app";
 
-// Endpoints API
+// --- RUTAS API ---
 static const char* ENDPOINT_CHECKCODE = "/api/reservas/checkCode";
 static const char* ENDPOINT_CONFIRM_ARRIVAL = "/api/reservas/confirm-arrival";
 static const char* ENDPOINT_CANCEL_RESERVATION = "/api/reservas/cancel-arrival";
@@ -20,31 +20,30 @@ static const char* ENDPOINT_CANCEL_SPECIFIC_RESERVATION = "/api/reservas/cancel"
 static const char* ENDPOINT_GET_ACTIVE_RESERVATIONS = "/api/reservas/active-reservations";
 
 // --- PINES RFID ---
-#define SS_PIN D4
-#define RST_PIN D3
+#define SS_PIN D8
+#define RST_PIN D4
 
-// --- OBJETOS ---
+// --- SERVIDOR WEB, LOGGER, Y LECTOR RFID ---
+WiFiServer telnetServer(23);
+WiFiClient telnetClient;
 ESP8266WebServer server(80);
 MFRC522 mfrc522(SS_PIN, RST_PIN);
 
-// RFID autorizado
+// --- RFIDs AUTORIZADOS ---
 const byte uid1[] = {0x03, 0x77, 0xFF, 0x13};
 
-// Timers
-unsigned long lastRFIDCheck = 0;
-unsigned long lastOccupancyCheck = 0;
-unsigned long lastCancelCheck = 0;
-unsigned long lastSyncCheck = 0;
-unsigned long lastArduinoHeartbeat = 0;
-unsigned long lastPingArduino = 0;
+// --- TIEMPOS ---
+unsigned long ultRFIDCheck = 0;
+unsigned long ultOcupacionPlazaCheck = 0;
+unsigned long ultPing = 0;
+unsigned long ultReservasCheck = 0;
 
-const unsigned long RFID_CHECK_INTERVAL = 100;
-const unsigned long OCCUPANCY_CHECK_INTERVAL = 5000;
-const unsigned long CANCEL_CHECK_INTERVAL = 60000;
-const unsigned long SYNC_CHECK_INTERVAL = 300000;
-const unsigned long ARDUINO_TIMEOUT = 45000; // 45 segundos sin heartbeat
-const unsigned long PING_ARDUINO_INTERVAL = 30000; // Ping cada 30s
+const unsigned long TIEMPO_CHECK_RFID = 100;
+const unsigned long TIEMPO_CHECK_OCUPACION = 5000;
+const unsigned long TIEMPO_PING = 1000;
+const unsigned long TIEMPO_OBTENER_RESERVAS = 150000;
 
+// --- VARIABLES BASE ---
 struct ActiveReservation {
   String reservationId;
   int spotNumber;
@@ -53,39 +52,57 @@ struct ActiveReservation {
   String userCode;
 };
 
+bool arduinoConectado = false;
 ActiveReservation activeReservations[4];
 bool spotOccupied[4] = {false, false, false, false};
-bool arduinoConnected = false;
-int spotMapping[4] = {3, 4, 5, 6}; // Mapeo físico a BD
+int spotMapping[4] = {3, 4, 5, 6}; // Plazas
 
 // --- PROTOTIPOS ---
 bool wifiConnect();
-void handleSerial();
 void setupWebServer();
-void handleRoot();
-void handleCodeSubmit();
-void handleRFID();
+void webPrincipal();
+void webCodigo();
+void RFID();
 bool esUIDValido(byte* uid);
 void enviarComandoArduino(String comando);
 String generateResultHTML(const String& title, const String& message, bool isError = false);
-void checkOccupancyAndConfirm();
-void checkAndCancelExpiredReservations();
-void confirmArrival(String reservationId);
-void cancelReservation(String reservationId);
-void processArduinoMessage(String message);
-void addActiveReservation(String reservationId, int spotNumber, String userCode = "");
-void syncActiveReservations();
-void periodicSync();
-void printReservationsStatus();
-void checkArduinoConnection();
+void confirmarLlegada(String reservationId);
+void cancelarReserva(String reservationId);
+void procesarComandosArduino(String message);
+void obtenerReservasActivas();
+void mostrarEstadosReservas();
+void checkOcupacionesYConfirmar();
+void checkReservasExpiradasCanceladas();
+bool Arduino();
 int getSpotIndex(int spotNumber);
 
 void setup() {
-  Serial.begin(115200);
-  Serial1.begin(9600);
-  Serial.println("ESP8266 Parking Controller v2.0 iniciando...");
+  Serial.begin(9600);
+  delay(200);
+  
+  // --- WIFI ---
+  if (!wifiConnect()) { telnetLog("❌ Error al conectar el WiFi") return; }
 
-  // Inicializar reservas
+  telnetServer.begin();
+  telnetServer.setNoDelay(true);
+
+  telnetLog("❗ ESP8266 - ParkElite v1.0 iniciando...");
+
+  // --- ARDUINO ---
+  unsigned long ultAviso = millis();
+  telnetLog("🔌 Conectando con Arduino... (ESP8266)");
+  while (!arduinoConectado) {
+    Arduino();
+
+    if (millis() - ultAviso >= 10000) {
+      telnetLog("⏳ Esperando conexión con Arduino... (ESP8266)");
+      ultAviso = millis();
+    }
+
+    delay(100);
+  }
+
+  // --- INICIALIZAR RESERVAS DE FORMA LOCAL ---
   for (int i = 0; i < 4; i++) {
     activeReservations[i].reservationId = "";
     activeReservations[i].spotNumber = -1;
@@ -93,95 +110,111 @@ void setup() {
     activeReservations[i].confirmed = false;
     activeReservations[i].userCode = "";
   }
-
+  telnetLog("✅ Variables locales inicializadas (ESP8266)");
+  
+  // --- RFID ---
   SPI.begin();
   mfrc522.PCD_Init();
-  Serial.println("RFID RC522 inicializado");
+  telnetLog("✅ RFID RC522 inicializado (ESP8266)");
 
-  if (!wifiConnect()) {
-    Serial.println("Error conectando WiFi");
-    return;
-  }
-
-  setupWebServer();
-  
-  // Esperar conexión con Arduino
-  Serial.println("Esperando conexión con Arduino...");
-  unsigned long startWait = millis();
-  while (!arduinoConnected && millis() - startWait < 10000) {
-    handleSerial();
-    delay(100);
-  }
-  
-  if (!arduinoConnected) {
-    Serial.println("⚠️ Arduino no responde, continuando...");
-  }
-  
+  // --- RESERVAS ---
   delay(2000);
-  Serial.println("🔄 Iniciando sincronización inicial...");
-  syncActiveReservations();
+  telnetLog("🔄 Iniciando sincronización inicial... (ESP8266)");
+  obtenerReservasActivas();
   
-  Serial.println("Sistema listo");
-  printReservationsStatus();
+  // --- SERVIDOR WEB ---
+  if (!setupWebServer()) { telnetLog("❌ Error al iniciar el servidor web"); return;}
+  
+  telnetLog("✅ Sistema iniciado (ESP8266)");
 }
 
 void loop() {
+  // --- TELNET LOGGER ---
+  WiFiClient newClient = telnetServer.available();
+  if (newClient) {
+    if (!telnetClient || !telnetClient.connected()) {
+      if (telnetClient) telnetClient.stop();
+      telnetClient = newClient;
+      telnetLog("== Cliente Telnet conectado ==");
+      telnetLog(String("IP: ") + telnetClient.remoteIP().toString());
+    } else {
+      // rechazar clientes extras
+      newClient.stop();
+    }
+  }
+  // --- SOLICITUDES HTTP --
   server.handleClient();
-  handleSerial();
-  handleRFID();
-  checkArduinoConnection();
   
-  if (millis() - lastOccupancyCheck > OCCUPANCY_CHECK_INTERVAL) {
-    checkOccupancyAndConfirm();
-    lastOccupancyCheck = millis();
+  // --- OTROS --
+  Arduino();
+  RFID();
+  
+  // --- ACTUALIZAR RESERVAS CADA 15M --
+ if (millis() - ultReservasCheck > TIEMPO_OBTENER_RESERVAS) {
+   obtenerReservasActivas();
+   ultReservasCheck = millis();
   }
-  
-  if (millis() - lastCancelCheck > CANCEL_CHECK_INTERVAL) {
-    checkAndCancelExpiredReservations();
-    lastCancelCheck = millis();
-  }
-  
-  periodicSync();
 }
 
-void checkArduinoConnection() {
-  // enviar ping periódico
-  if (millis() - lastPingArduino > PING_ARDUINO_INTERVAL) {
-    enviarComandoArduino("PING");
-    lastPingArduino = millis();
+// --- FUNCIONES ---
+
+void telnetLog(const String &msg) {
+  if (telnetClient && telnetClient.connected()) {
+    telnetClient.println(msg);
   }
-  
-  // timeout
-  if (arduinoConnected && millis() - lastArduinoHeartbeat > ARDUINO_TIMEOUT) {
-    arduinoConnected = false;
-    Serial.println("⚠️ Conexión con Arduino perdida");
+}
+
+bool esUIDValido(byte* uid) {
+  for (byte i = 0; i < 4; i++) {
+    if (uid[i] != uid1[i]) return false;
   }
+  return true;
 }
 
 bool wifiConnect() {
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial.print("Conectando a WiFi");
+  telnetLog("🔌 Conectando WiFi (ESP8266)");
   unsigned long start = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - start < 15000) {
     delay(500);
-    Serial.print('.');
+    telnetLog('.');
   }
-  Serial.println();
+  telnetLog();
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.print("IP: ");
-    Serial.println(WiFi.localIP());
+    telnetLog("✅ WiFi conectado (ESP8266)");
+    telnetLog("💻 IPv4: ");
+    telnetLog(WiFi.localIP());
     return true;
   }
   return false;
 }
 
+// --- EVENTOS ---
+
+void Arduino() {
+  if (millis() - ultPing >= TIEMPO_PING) {
+    Serial.println("PING");
+    ultPing = millis();
+    telnetLog("→ PING enviado");
+  }
+
+  while (Serial.available()) {
+    String mensaje = Serial.readStringUntil('\n');
+    mensaje.trim();
+    if (mensaje.length() > 0) {
+      telnetLog("← ARDUINO: " + mensaje);
+      procesarComandosArduino(mensaje);
+    }
+  }
+}
+
 void setupWebServer() {
-  server.on("/", HTTP_GET, handleRoot);
-  server.on("/submit", HTTP_POST, handleCodeSubmit);
+  server.on("/", HTTP_GET, webPrincipal);
+  server.on("/submit", HTTP_POST, webCodigo);
   server.on("/status", HTTP_GET, []() {
     String status = "{\"arduino\":";
-    status += arduinoConnected ? "true" : "false";
+    status += arduinoConectado ? "true" : "false";
     status += ",\"wifi\":";
     status += (WiFi.status() == WL_CONNECTED) ? "true" : "false";
     status += ",\"activeReservations\":";
@@ -195,10 +228,378 @@ void setupWebServer() {
     server.send(200, "application/json", status);
   });
   server.begin();
-  Serial.println("Web server iniciado");
+  telnetLog("✅ Servidor web iniciado (ESP8266)");
 }
 
-void handleRoot() {
+void mostrarEstadosReservas() {
+  telnetLog("📋 Estado actual de reservas: (ESP8266)");
+  bool hasReservations = false;
+  
+  for (int i = 0; i < 4; i++) {
+    if (activeReservations[i].reservationId.length() > 0) {
+      hasReservations = true;
+      telnetLog("  Slot " + String(i + 1) + ":");
+      telnetLog("    - ID: " + activeReservations[i].reservationId);
+      telnetLog("    - Plaza: " + String(activeReservations[i].spotNumber));
+      telnetLog("    - Código: " + activeReservations[i].userCode);
+      telnetLog("    - Confirmado: " + String(activeReservations[i].confirmed ? "Sí" : "No"));
+      telnetLog("    - Tiempo: " + String((millis() - activeReservations[i].startTime) / 1000) + "s");
+    }
+  }
+  
+  if (!hasReservations) {
+    telnetLog("😑 No hay reservas activas (ESP8266)");
+  }
+
+  telnetLog("🔌 Arduino: " + String(arduinoConnected ? "Conectado" : "Desconectado"));
+  
+  telnetLog("🚗 Ocupación: [");
+  for (int i = 0; i < 4; i++) {
+    telnetLog(spotOccupied[i] ? "●" : "○");
+    if (i < 3) telnetLog(",");
+  }
+  telnetLog("] (Plazas " + String(spotMapping[0]) + "," + String(spotMapping[1]) + "," + 
+                String(spotMapping[2]) + "," + String(spotMapping[3]) + ")");
+}
+
+void RFID() {
+  if (millis() - ultRFIDCheck < TIEMPO_CHECK_RFID) return;
+  ultRFIDCheck = millis();
+
+  if (!mfrc522.PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial()) return;
+
+  if (esUIDValido(mfrc522.uid.uidByte)) {
+    telnetLog("✅ RFID Tag válido, enviando orden... (ESP8266)");
+    if (arduinoConectado) {
+      enviarComandoArduino("ABRIR");
+    } else {
+      telnetLog("⚠️ Arduino desconectado (ESP8266)");
+    }
+    delay(1000);
+  }
+
+  mfrc522.PICC_HaltA();
+  mfrc522.PCD_StopCrypto1();
+}
+
+void confirmarLlegada(String reservationId) {
+  WiFiClient client;
+  HTTPClient http;
+  String url = String("https://") + API_HOST_DOMAIN + ENDPOINT_CONFIRM_ARRIVAL + "/" + reservationId;
+  
+  StaticJsonDocument<128> doc;
+  doc["reservationId"] = reservationId;
+  String payload;
+  serializeJson(doc, payload);
+  
+  http.begin(client, url);
+  http.addHeader("Content-Type", "application/json");
+  http.setTimeout(5000);
+  int statusCode = http.POST(payload);
+  http.end();
+  
+  telnetLog("🚗 Confirmación de llegada - Status: " + String(statusCode));
+}
+
+void cancelarReserva(String reservationId) {
+  WiFiClient client;
+  HTTPClient http;
+  String url = String("https://") + API_HOST_DOMAIN + ENDPOINT_CANCEL_SPECIFIC_RESERVATION + "/" + reservationId;
+  
+  http.begin(client, url);
+  http.addHeader("Content-Type", "application/json");
+  http.setTimeout(5000);
+  int statusCode = http.DELETE();
+  http.end();
+  
+  telnetLog("Cancelación de reserva - Status: " + String(statusCode));
+}
+
+void checkOcupacionesYConfirmar() {
+  if (!arduinoConnected) return;
+  
+  enviarComandoArduino("CONSULTAR_OCUPACION");
+  
+  // checkear confirmaciones pendientes
+  for (int i = 0; i < 4; i++) {
+    if (activeReservations[i].reservationId.length() > 0 && 
+        !activeReservations[i].confirmed) {
+      
+      int spotIndex = getSpotIndex(activeReservations[i].spotNumber);
+      if (spotIndex >= 0 && spotOccupied[spotIndex]) {
+        confirmarLlegada(activeReservations[i].reservationId);
+        activeReservations[i].confirmed = true;
+        telnetLog("✅ Llegada confirmada para reserva " + activeReservations[i].reservationId + 
+                      " en plaza " + String(activeReservations[i].spotNumber));
+      }
+    }
+  }
+}
+
+void checkReservasExpiradasCanceladas() {
+  unsigned long currentTime = millis();
+  
+  for (int i = 0; i < 4; i++) {
+    if (activeReservations[i].reservationId.length() > 0 && 
+        !activeReservations[i].confirmed &&
+        (currentTime - activeReservations[i].startTime) > 1200000) { // 20 minutos
+      
+      telnetLog("⏰ Cancelando reserva expirada: " + activeReservations[i].reservationId);
+      cancelarReserva(activeReservations[i].reservationId);
+      
+      // limpiar reserva local
+      activeReservations[i].reservationId = "";
+      activeReservations[i].spotNumber = -1;
+      activeReservations[i].startTime = 0;
+      activeReservations[i].confirmed = false;
+      activeReservations[i].userCode = "";
+    }
+  }
+}
+
+// --- MENSAJES ---
+
+void procesarComandosArduino(String message) {
+  /*
+  ESP8266 → ARDUINO:
+  PING	Comando de verificación de conexión. Arduino responde con PONG si está activo.
+  ABRIR	Orden para abrir la barrera. Arduino abre el servo 5 segundos y luego lo cierra automáticamente.
+  CONSULTAR_OCUPACION	Solicita el estado de ocupación de las plazas. Arduino responde con ESTADO_OCUPACION:....
+  STATUS_REQUEST	Solicita el estado completo del sistema (sensores y barrera). Arduino responde con SYSTEM_STATUS:....
+  RESET_SENSORS	Orden para reiniciar/resetear todos los sensores de ocupación. Arduino responde con SENSORS_RESET_OK.
+
+  ARDUINO → ESP8266:
+  PONG	Respuesta al PING enviado por ESP, confirma que Arduino está conectado.
+  BARRERA_ABIERTA	Confirma que la barrera fue abierta (respuesta al comando ABRIR).
+  SENSOR_DETECTING:<n>	Notifica que un sensor detectó un vehículo en la plaza <n>. Estado inicial antes de confirmar ocupación.
+  OCUPACION_CONFIRMADA:<n>	Confirma que la plaza <n> está ocupada después del tiempo de confirmación (60s).
+  LIBERADO:<n>	Notifica que la plaza <n> se liberó.
+  ESTADO_OCUPACION:<estados>:<plazas>	Envía el estado de ocupación de todas las plazas (1 = ocupada, 0 = libre). Incluye correspondencia de IDs de plaza.
+  SYSTEM_STATUS:SENSORS_OK:<estados>:BARRIER_OK:1	Estado completo de sensores y barrera. Indica si sensores están funcionando y si barrera está operativa.
+  SENSORS_RESET_OK	Confirma que los sensores fueron reseteados tras el comando RESET_SENSORS.
+  */
+
+  if (message == "PONG") {
+    arduinoConectado = true;
+    ultPing = millis();
+    //enviarComandoArduino("STATUS_REQUEST");
+  }
+  else if (message == "BARRERA_ABIERTA") {
+    telnetLog("✅ Barrera abierta confirmada");
+  }
+  else if (message.startsWith("OCUPACION_CONFIRMADA:")) {
+    int spotNumber = message.substring(21).toInt();
+    int spotIndex = getSpotIndex(spotNumber);
+    if (spotIndex >= 0) {
+      spotOccupied[spotIndex] = true;
+      telnetLog("🚗 Plaza " + String(spotNumber) + " ocupada confirmada");
+    }
+  }
+  else if (message.startsWith("LIBERADO:")) {
+    int spotNumber = message.substring(9).toInt();
+    int spotIndex = getSpotIndex(spotNumber);
+    if (spotIndex >= 0) {
+      spotOccupied[spotIndex] = false;
+      telnetLog("🅿️ Plaza " + String(spotNumber) + " liberada");
+      
+      // Limpiar reserva confirmada
+      for (int i = 0; i < 4; i++) {
+        if (activeReservations[i].spotNumber == spotNumber && activeReservations[i].confirmed) {
+          telnetLog("Limpiando reserva completada: " + activeReservations[i].reservationId);
+          activeReservations[i].reservationId = "";
+          activeReservations[i].spotNumber = -1;
+          activeReservations[i].startTime = 0;
+          activeReservations[i].confirmed = false;
+          activeReservations[i].userCode = "";
+          break;
+        }
+      }
+    }
+  }
+  else if (message.startsWith("SENSOR_DETECTING:")) {
+    int spotNumber = message.substring(17).toInt();
+    telnetLog("👁️ Detectando vehículo en plaza " + String(spotNumber));
+  }
+  else if (message.startsWith("ESTADO_OCUPACION:")) {
+    String data = message.substring(17);
+    int colonPos = data.indexOf(':');
+    
+    if (colonPos > 0) {
+      String estados = data.substring(0, colonPos);
+      String plazas = data.substring(colonPos + 1);
+      
+      // Actualizar estados
+      for (int i = 0; i < 4 && i * 2 < estados.length(); i++) {
+        char estado = estados.charAt(i * 2);
+        spotOccupied[i] = (estado == '1');
+      }
+      
+      telnetLog("📊 Estado ocupación actualizado: " + estados + " (Plazas: " + plazas + ")");
+    }
+  }
+  else if (message.startsWith("SYSTEM_STATUS:")) {
+    telnetLog("🔧 Estado del sistema Arduino recibido");
+  }
+  else if (message == "SENSORS_RESET_OK") {
+    telnetLog("✅ Sensores Arduino reseteados");
+  }
+  else {
+    telnetLog("🤔 Mensaje desconocido de Arduino: " + message);
+  }
+}
+
+int getSpotIndex(int spotNumber) {
+  for (int i = 0; i < 4; i++) {
+    if (spotMapping[i] == spotNumber) {
+      return i;
+    }
+  }
+  return -1; // No encontrado
+}
+
+void obtenerReservasActivas() {
+  telnetLog("🔄 Sincronizando reservas activas... (ESP8266)");
+  
+  if (WiFi.status() != WL_CONNECTED) {
+    telnetLog("❌ WiFi desconectado, reintentando... (ESP8266)");
+    if (!wifiConnect()) {
+      telnetLog("❌ No se pudo reconectar WiFi (ESP8266)");
+      return;
+    }
+  }
+  
+  WiFiClient client;
+  HTTPClient http;
+  String url = String("https://") + API_HOST_DOMAIN + ENDPOINT_GET_ACTIVE_RESERVATIONS;
+  
+  http.begin(client, url);
+  http.addHeader("Content-Type", "application/json");
+  http.setTimeout(15000);
+  
+  int statusCode = http.GET();
+  String response = (statusCode > 0) ? http.getString() : "";
+  http.end();
+  
+  if (statusCode != 200) {
+    telnetLog("❌ Error en sincronización - Status: " + String(statusCode) + " (ESP8266)");
+    return;
+  }
+  
+  StaticJsonDocument<2048> doc;
+  DeserializationError error = deserializeJson(doc, response);
+  
+  if (error) {
+    telnetLog("❌ Error al parsear JSON de reservas: " + String(error.c_str()) + " (ESP8266)");
+    return;
+  }
+  
+  if (!doc["success"].as<bool>()) {
+    telnetLog("❌ Respuesta del servidor indica error (ESP8266)");
+    return;
+  }
+  
+  // limpiar reservas actuales
+  for (int i = 0; i < 4; i++) {
+    activeReservations[i].reservationId = "";
+    activeReservations[i].spotNumber = -1;
+    activeReservations[i].startTime = 0;
+    activeReservations[i].confirmed = false;
+    activeReservations[i].userCode = "";
+  }
+  
+  JsonArray reservations = doc["reservations"].as<JsonArray>();
+  int index = 0;
+  
+  for (JsonObject reservation : reservations) {
+    if (index >= 4) break;
+    
+    String reservationId = reservation["_id"].as<String>();
+    String status = reservation["status"].as<String>();
+    String userCode = String(reservation["code"].as<int>());
+    
+    JsonObject parkingSpot = reservation["parkingSpotId"];
+    int spotNumber = parkingSpot["spotNumber"].as<int>();
+    
+    if (reservationId.length() > 0 && spotNumber > 0) {
+      activeReservations[index].reservationId = reservationId;
+      activeReservations[index].spotNumber = spotNumber;
+      activeReservations[index].startTime = millis();
+      activeReservations[index].confirmed = (status == "confirmado");
+      activeReservations[index].userCode = userCode;
+      
+      telnetLog("✅ Reserva cargada - ID: " + reservationId + 
+                    " | Plaza: " + String(spotNumber) + 
+                    " | Código: " + userCode + 
+                    " | Estado: " + status);
+      index++;
+    }
+  }
+  
+  telnetLog("🔄 Sincronización completada. Reservas cargadas: " + String(index) + " (ESP8266)");
+  mostrarEstadosReservas();
+}
+
+void webCodigo() {
+  if (!server.hasArg("code")) {
+    server.send(200, "text/html", generateResultHTML("Error", "Falta código", true));
+    return;
+  }
+  
+  String code = server.arg("code");
+
+  StaticJsonDocument<128> j;
+  j["code"] = code;
+  String payload;
+  serializeJson(j, payload);
+
+  WiFiClient client;
+  HTTPClient http;
+  String url = String("https://") + API_HOST_DOMAIN + ENDPOINT_CHECKCODE;
+  http.begin(client, url);
+  http.addHeader("Content-Type", "application/json");
+  int statusCode = http.POST(payload);
+  String resp = (statusCode > 0) ? http.getString() : "";
+  http.end();
+
+  if (statusCode <= 0) {
+    server.send(200, "text/html", generateResultHTML("Error", "No se pudo conectar con el servidor", true));
+    return;
+  }
+
+  StaticJsonDocument<256> res;
+  DeserializationError err = deserializeJson(res, resp);
+  if (err) {
+    server.send(200, "text/html", generateResultHTML("Error", "Error interno del servidor", true));
+    return;
+  }
+
+  bool allowed = res["allowed"];
+  int spotNumber = res.containsKey("spotId") ? res["spotId"].as<int>() : -1;
+
+  if (allowed) {
+    if (arduinoConectado) {
+      enviarComandoArduino("ABRIR");
+    } else {
+      telnetLog("⚠️ Arduino desconectado, no se puede abrir barrera (ESP8266)");
+    }
+    
+    // busca reserva activa por código
+    for (int i = 0; i < 4; i++) {
+      if (activeReservations[i].userCode == code && !activeReservations[i].confirmed) {
+        activeReservations[i].startTime = millis(); // Actualizar tiempo de llegada
+        telnetLog("✅ Acceso concedido para reserva: " + activeReservations[i].reservationId + " (ESP8266)");
+        break;
+      }
+    }
+  }
+
+  String msg = allowed ? "Acceso permitido" : "Código inválido o reserva no activa";
+  server.send(200, "text/html", generateResultHTML(allowed ? "Éxito" : "Acceso denegado", msg, !allowed));
+}
+
+// --- PÁGINA WEB ---
+
+void webPrincipal() {
   String html = "<html><head>"
     "<meta charset='UTF-8'>"
     "<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
@@ -344,7 +745,7 @@ void handleRoot() {
         "width: 12px;"
         "height: 12px;"
         "border-radius: 50%;"
-        "background: " + String(arduinoConnected ? "#4caf50" : "#f44336") + ";"
+        "background: " + String(arduinoConectado ? "#4caf50" : "#f44336") + ";"
     "}"
     "@media (max-width: 480px) {"
         ".container { padding: 40px 25px; }"
@@ -373,328 +774,11 @@ void handleRoot() {
             "<p><strong>🛡️ Acceso Seguro:</strong> Este sistema verifica su identidad mediante un código único de 6 dígitos.</p>"
         "</div>"
         "<div class='rfid-info'>"
-            "<p><strong>📡 Arduino:</strong> " + String(arduinoConnected ? "Conectado ✅" : "Desconectado ❌") + "</p>"
+            "<p><strong>📡 Arduino:</strong> " + String(arduinoConectado ? "Conectado ✅" : "Desconectado ❌") + "</p>"
         "</div>"
     "</div>"
     "</body></html>";
   server.send(200, "text/html", html);
-}
-
-void handleCodeSubmit() {
-  if (!server.hasArg("code")) {
-    server.send(200, "text/html", generateResultHTML("Error", "Falta código", true));
-    return;
-  }
-  
-  String code = server.arg("code");
-
-  StaticJsonDocument<128> j;
-  j["code"] = code;
-  String payload;
-  serializeJson(j, payload);
-
-  WiFiClient client;
-  HTTPClient http;
-  String url = String("https://") + API_HOST_DOMAIN + ENDPOINT_CHECKCODE;
-  http.begin(client, url);
-  http.addHeader("Content-Type", "application/json");
-  int statusCode = http.POST(payload);
-  String resp = (statusCode > 0) ? http.getString() : "";
-  http.end();
-
-  if (statusCode <= 0) {
-    server.send(200, "text/html", generateResultHTML("Error", "No se pudo conectar con el servidor", true));
-    return;
-  }
-
-  StaticJsonDocument<256> res;
-  DeserializationError err = deserializeJson(res, resp);
-  if (err) {
-    server.send(200, "text/html", generateResultHTML("Error", "Error interno del servidor", true));
-    return;
-  }
-
-  bool allowed = res["allowed"];
-  int spotNumber = res.containsKey("spotId") ? res["spotId"].as<int>() : -1;
-
-  if (allowed) {
-    if (arduinoConnected) {
-      enviarComandoArduino("ABRIR");
-    } else {
-      Serial.println("⚠️ Arduino desconectado, no se puede abrir barrera");
-    }
-    
-    // busca reserva activa por código
-    for (int i = 0; i < 4; i++) {
-      if (activeReservations[i].userCode == code && !activeReservations[i].confirmed) {
-        activeReservations[i].startTime = millis(); // Actualizar tiempo de llegada
-        Serial.println("Acceso concedido para reserva: " + activeReservations[i].reservationId);
-        break;
-      }
-    }
-  }
-
-  String msg = allowed ? "Acceso permitido" : "Código inválido o reserva no activa";
-  server.send(200, "text/html", generateResultHTML(allowed ? "Éxito" : "Acceso denegado", msg, !allowed));
-}
-
-void handleRFID() {
-  if (millis() - lastRFIDCheck < RFID_CHECK_INTERVAL) return;
-  lastRFIDCheck = millis();
-
-  if (!mfrc522.PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial()) return;
-
-  if (esUIDValido(mfrc522.uid.uidByte)) {
-    Serial.println("✅ RFID Tag válido, enviando orden...");
-    if (arduinoConnected) {
-      enviarComandoArduino("ABRIR");
-    } else {
-      Serial.println("⚠️ Arduino desconectado");
-    }
-    delay(1000);
-  }
-
-  mfrc522.PICC_HaltA();
-  mfrc522.PCD_StopCrypto1();
-}
-
-void checkOccupancyAndConfirm() {
-  if (!arduinoConnected) return;
-  
-  enviarComandoArduino("CONSULTAR_OCUPACION");
-  
-  // checkear confirmaciones pendientes
-  for (int i = 0; i < 4; i++) {
-    if (activeReservations[i].reservationId.length() > 0 && 
-        !activeReservations[i].confirmed) {
-      
-      int spotIndex = getSpotIndex(activeReservations[i].spotNumber);
-      if (spotIndex >= 0 && spotOccupied[spotIndex]) {
-        confirmArrival(activeReservations[i].reservationId);
-        activeReservations[i].confirmed = true;
-        Serial.println("✅ Llegada confirmada para reserva " + activeReservations[i].reservationId + 
-                      " en plaza " + String(activeReservations[i].spotNumber));
-      }
-    }
-  }
-}
-
-void checkAndCancelExpiredReservations() {
-  unsigned long currentTime = millis();
-  
-  for (int i = 0; i < 4; i++) {
-    if (activeReservations[i].reservationId.length() > 0 && 
-        !activeReservations[i].confirmed &&
-        (currentTime - activeReservations[i].startTime) > 1200000) { // 20 minutos
-      
-      Serial.println("⏰ Cancelando reserva expirada: " + activeReservations[i].reservationId);
-      cancelReservation(activeReservations[i].reservationId);
-      
-      // limpiar reserva local
-      activeReservations[i].reservationId = "";
-      activeReservations[i].spotNumber = -1;
-      activeReservations[i].startTime = 0;
-      activeReservations[i].confirmed = false;
-      activeReservations[i].userCode = "";
-    }
-  }
-}
-
-void confirmArrival(String reservationId) {
-  WiFiClient client;
-  HTTPClient http;
-  String url = String("https://") + API_HOST_DOMAIN + ENDPOINT_CONFIRM_ARRIVAL + "/" + reservationId;
-  
-  StaticJsonDocument<128> doc;
-  doc["reservationId"] = reservationId;
-  String payload;
-  serializeJson(doc, payload);
-  
-  http.begin(client, url);
-  http.addHeader("Content-Type", "application/json");
-  http.setTimeout(5000);
-  int statusCode = http.POST(payload);
-  http.end();
-  
-  Serial.println("Confirmación de llegada - Status: " + String(statusCode));
-}
-
-void cancelReservation(String reservationId) {
-  WiFiClient client;
-  HTTPClient http;
-  String url = String("https://") + API_HOST_DOMAIN + ENDPOINT_CANCEL_SPECIFIC_RESERVATION + "/" + reservationId;
-  
-  http.begin(client, url);
-  http.addHeader("Content-Type", "application/json");
-  http.setTimeout(5000);
-  int statusCode = http.DELETE();
-  http.end();
-  
-  Serial.println("Cancelación de reserva - Status: " + String(statusCode));
-}
-
-void addActiveReservation(String reservationId, int spotNumber, String userCode) {
-  for (int i = 0; i < 4; i++) { // si existe
-    if (activeReservations[i].reservationId == reservationId) {
-      activeReservations[i].spotNumber = spotNumber;
-      activeReservations[i].startTime = millis();
-      activeReservations[i].confirmed = false;
-      activeReservations[i].userCode = userCode;
-      Serial.println("Reserva actualizada: " + reservationId + " - Plaza: " + String(spotNumber));
-      return;
-    }
-  }
-  
-  for (int i = 0; i < 4; i++) { // si no existe
-    if (activeReservations[i].reservationId.length() == 0) {
-      activeReservations[i].reservationId = reservationId;
-      activeReservations[i].spotNumber = spotNumber;
-      activeReservations[i].startTime = millis();
-      activeReservations[i].confirmed = false;
-      activeReservations[i].userCode = userCode;
-      Serial.println("✅ Reserva activa agregada: " + reservationId + " - Plaza: " + String(spotNumber) + " - Código: " + userCode);
-      break;
-    }
-  }
-}
-
-void syncActiveReservations() {
-  Serial.println("🔄 Sincronizando reservas activas...");
-  
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("❌ WiFi desconectado, reintentando...");
-    if (!wifiConnect()) {
-      Serial.println("❌ No se pudo reconectar WiFi");
-      return;
-    }
-  }
-  
-  WiFiClient client;
-  HTTPClient http;
-  String url = String("https://") + API_HOST_DOMAIN + ENDPOINT_GET_ACTIVE_RESERVATIONS;
-  
-  http.begin(client, url);
-  http.addHeader("Content-Type", "application/json");
-  http.setTimeout(15000);
-  
-  int statusCode = http.GET();
-  String response = (statusCode > 0) ? http.getString() : "";
-  http.end();
-  
-  if (statusCode != 200) {
-    Serial.println("❌ Error en sincronización - Status: " + String(statusCode));
-    return;
-  }
-  
-  StaticJsonDocument<2048> doc;
-  DeserializationError error = deserializeJson(doc, response);
-  
-  if (error) {
-    Serial.println("❌ Error al parsear JSON de reservas: " + String(error.c_str()));
-    return;
-  }
-  
-  if (!doc["success"].as<bool>()) {
-    Serial.println("❌ Respuesta del servidor indica error");
-    return;
-  }
-  
-  // limpiar reservas actuales
-  for (int i = 0; i < 4; i++) {
-    activeReservations[i].reservationId = "";
-    activeReservations[i].spotNumber = -1;
-    activeReservations[i].startTime = 0;
-    activeReservations[i].confirmed = false;
-    activeReservations[i].userCode = "";
-  }
-  
-  JsonArray reservations = doc["reservations"].as<JsonArray>();
-  int index = 0;
-  
-  for (JsonObject reservation : reservations) {
-    if (index >= 4) break;
-    
-    String reservationId = reservation["_id"].as<String>();
-    String status = reservation["status"].as<String>();
-    String userCode = String(reservation["code"].as<int>());
-    
-    JsonObject parkingSpot = reservation["parkingSpotId"];
-    int spotNumber = parkingSpot["spotNumber"].as<int>();
-    
-    if (reservationId.length() > 0 && spotNumber > 0) {
-      activeReservations[index].reservationId = reservationId;
-      activeReservations[index].spotNumber = spotNumber;
-      activeReservations[index].startTime = millis();
-      activeReservations[index].confirmed = (status == "confirmado");
-      activeReservations[index].userCode = userCode;
-      
-      Serial.println("✅ Reserva cargada - ID: " + reservationId + 
-                    " | Plaza: " + String(spotNumber) + 
-                    " | Código: " + userCode + 
-                    " | Estado: " + status);
-      index++;
-    }
-  }
-  
-  Serial.println("🔄 Sincronización completada. Reservas cargadas: " + String(index));
-  printReservationsStatus();
-}
-
-void periodicSync() {
-  if (millis() - lastSyncCheck > SYNC_CHECK_INTERVAL) {
-    syncActiveReservations();
-    lastSyncCheck = millis();
-  }
-}
-
-void printReservationsStatus() {
-  Serial.println("📋 Estado actual de reservas:");
-  bool hasReservations = false;
-  
-  for (int i = 0; i < 4; i++) {
-    if (activeReservations[i].reservationId.length() > 0) {
-      hasReservations = true;
-      Serial.println("  Slot " + String(i + 1) + ":");
-      Serial.println("    - ID: " + activeReservations[i].reservationId);
-      Serial.println("    - Plaza: " + String(activeReservations[i].spotNumber));
-      Serial.println("    - Código: " + activeReservations[i].userCode);
-      Serial.println("    - Confirmado: " + String(activeReservations[i].confirmed ? "Sí" : "No"));
-      Serial.println("    - Tiempo: " + String((millis() - activeReservations[i].startTime) / 1000) + "s");
-    }
-  }
-  
-  if (!hasReservations) {
-    Serial.println("  No hay reservas activas");
-  }
-  
-  // Estado Arduino
-  Serial.println("🔌 Arduino: " + String(arduinoConnected ? "Conectado" : "Desconectado"));
-  
-  // Estado ocupación
-  Serial.print("🚗 Ocupación: [");
-  for (int i = 0; i < 4; i++) {
-    Serial.print(spotOccupied[i] ? "●" : "○");
-    if (i < 3) Serial.print(",");
-  }
-  Serial.println("] (Plazas " + String(spotMapping[0]) + "," + String(spotMapping[1]) + "," + 
-                String(spotMapping[2]) + "," + String(spotMapping[3]) + ")");
-}
-
-bool esUIDValido(byte* uid) {
-  for (byte i = 0; i < 4; i++) {
-    if (uid[i] != uid1[i]) return false;
-  }
-  return true;
-}
-
-void enviarComandoArduino(String comando) {
-  if (!arduinoConnected && comando != "PING") {
-    Serial.println("⚠️ Arduino desconectado, comando ignorado: " + comando);
-    return;
-  }
-  
-  Serial1.println(comando);
-  Serial.println("→ Arduino: " + comando);
 }
 
 String generateResultHTML(const String& title, const String& message, bool isError) {
@@ -789,106 +873,4 @@ String generateResultHTML(const String& title, const String& message, bool isErr
   html += "</div></body></html>";
   
   return html;
-}
-
-void handleSerial() {
-  if (!Serial1.available()) return;
-  
-  String msg = Serial1.readStringUntil('\n');
-  msg.trim();
-  
-  if (msg.length() == 0) return;
-  
-  Serial.println("← Arduino: " + msg);
-  processArduinoMessage(msg);
-}
-
-void processArduinoMessage(String message) {
-  if (message == "ARDUINO_READY") {
-    arduinoConnected = true;
-    lastArduinoHeartbeat = millis();
-    Serial.println("✅ Arduino conectado y listo");
-    
-    delay(500);
-    enviarComandoArduino("STATUS_REQUEST");
-  }
-  else if (message.startsWith("HEARTBEAT:")) {
-    arduinoConnected = true;
-    lastArduinoHeartbeat = millis();
-  }
-  else if (message == "PONG") {
-    arduinoConnected = true;
-    lastArduinoHeartbeat = millis();
-  }
-  else if (message == "BARRERA_ABIERTA") {
-    Serial.println("✅ Barrera abierta confirmada");
-  }
-  else if (message.startsWith("OCUPACION_CONFIRMADA:")) {
-    int spotNumber = message.substring(21).toInt();
-    int spotIndex = getSpotIndex(spotNumber);
-    if (spotIndex >= 0) {
-      spotOccupied[spotIndex] = true;
-      Serial.println("🚗 Plaza " + String(spotNumber) + " ocupada confirmada");
-    }
-  }
-  else if (message.startsWith("LIBERADO:")) {
-    int spotNumber = message.substring(9).toInt();
-    int spotIndex = getSpotIndex(spotNumber);
-    if (spotIndex >= 0) {
-      spotOccupied[spotIndex] = false;
-      Serial.println("🅿️ Plaza " + String(spotNumber) + " liberada");
-      
-      // Limpiar reserva confirmada
-      for (int i = 0; i < 4; i++) {
-        if (activeReservations[i].spotNumber == spotNumber && activeReservations[i].confirmed) {
-          Serial.println("Limpiando reserva completada: " + activeReservations[i].reservationId);
-          activeReservations[i].reservationId = "";
-          activeReservations[i].spotNumber = -1;
-          activeReservations[i].startTime = 0;
-          activeReservations[i].confirmed = false;
-          activeReservations[i].userCode = "";
-          break;
-        }
-      }
-    }
-  }
-  else if (message.startsWith("SENSOR_DETECTING:")) {
-    int spotNumber = message.substring(17).toInt();
-    Serial.println("👁️ Detectando vehículo en plaza " + String(spotNumber));
-  }
-  else if (message.startsWith("ESTADO_OCUPACION:")) {
-    String data = message.substring(17);
-    int colonPos = data.indexOf(':');
-    
-    if (colonPos > 0) {
-      String estados = data.substring(0, colonPos);
-      String plazas = data.substring(colonPos + 1);
-      
-      // Actualizar estados
-      for (int i = 0; i < 4 && i * 2 < estados.length(); i++) {
-        char estado = estados.charAt(i * 2);
-        spotOccupied[i] = (estado == '1');
-      }
-      
-      Serial.println("📊 Estado ocupación actualizado: " + estados + " (Plazas: " + plazas + ")");
-    }
-  }
-  else if (message.startsWith("SYSTEM_STATUS:")) {
-    Serial.println("🔧 Estado del sistema Arduino recibido");
-  }
-  else if (message == "SENSORS_RESET_OK") {
-    Serial.println("✅ Sensores Arduino reseteados");
-  }
-  else {
-    Serial.println("🤔 Mensaje desconocido de Arduino: " + message);
-  }
-}
-
-int getSpotIndex(int spotNumber) {
-  for (int i = 0; i < 4; i++) {
-    if (spotMapping[i] == spotNumber) {
-      return i;
-    }
-  }
-  return -1; // No encontrado
 }
