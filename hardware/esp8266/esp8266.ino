@@ -8,11 +8,12 @@
 #include <MFRC522.h>
 
 // --- CONFIGURACIÓN ---
-const char* WIFI_SSID         = "rocaysalta";
-const char* WIFI_PASSWORD     = "salta2043+";
-const char* API_HOST_DOMAIN   = "parkelite-production.up.railway.app";
+const char* WIFI_SSID         = "LAPTOP ANEXO 1";
+const char* WIFI_PASSWORD     = "Anexo2043";
+const char* API_HOST_DOMAIN   = "192.168.137.1:3000";
 
 // --- RUTAS API ---
+static const char* ENDPOINT_CHECKHEALTHSERVER = "/api/health-check";
 static const char* ENDPOINT_CHECKCODE = "/api/reservas/checkCode";
 static const char* ENDPOINT_CONFIRM_ARRIVAL = "/api/reservas/confirm-arrival";
 static const char* ENDPOINT_CANCEL_RESERVATION = "/api/reservas/cancel-arrival";
@@ -40,7 +41,7 @@ unsigned long ultReservasCheck = 0;
 
 const unsigned long TIEMPO_CHECK_RFID = 100;
 const unsigned long TIEMPO_CHECK_OCUPACION = 5000;
-const unsigned long TIEMPO_PING = 1000;
+const unsigned long TIEMPO_PING = 100000;
 const unsigned long TIEMPO_OBTENER_RESERVAS = 150000;
 
 // --- VARIABLES BASE ---
@@ -52,7 +53,10 @@ struct ActiveReservation {
   String userCode;
 };
 
+String logBuffer = "";
+bool telnetReady = false;
 bool arduinoConectado = false;
+bool inicio = false;
 ActiveReservation activeReservations[4];
 bool spotOccupied[4] = {false, false, false, false};
 int spotMapping[4] = {3, 4, 5, 6}; // Plazas
@@ -64,7 +68,6 @@ void webPrincipal();
 void webCodigo();
 void RFID();
 bool esUIDValido(byte* uid);
-void enviarComandoArduino(String comando);
 String generateResultHTML(const String& title, const String& message, bool isError = false);
 void confirmarLlegada(String reservationId);
 void cancelarReserva(String reservationId);
@@ -73,18 +76,27 @@ void obtenerReservasActivas();
 void mostrarEstadosReservas();
 void checkOcupacionesYConfirmar();
 void checkReservasExpiradasCanceladas();
-bool Arduino();
+void Arduino();
 int getSpotIndex(int spotNumber);
+void telnetLog(const String &msg);
 
 void setup() {
   Serial.begin(9600);
   delay(200);
   
   // --- WIFI ---
-  if (!wifiConnect()) { telnetLog("❌ Error al conectar el WiFi") return; }
+  if (!wifiConnect()) { telnetLog("❌ Error al conectar el WiFi"); return; }
 
   telnetServer.begin();
   telnetServer.setNoDelay(true);
+  telnetReady = true;
+
+  if (logBuffer.length() > 0) {
+    telnetLog("=== LOGS PREVIOS ===");
+    telnetLog(logBuffer);
+    telnetLog("=== FIN LOGS PREVIOS ===");
+    logBuffer = "";
+  }
 
   telnetLog("❗ ESP8266 - ParkElite v1.0 iniciando...");
 
@@ -92,6 +104,7 @@ void setup() {
   unsigned long ultAviso = millis();
   telnetLog("🔌 Conectando con Arduino... (ESP8266)");
   while (!arduinoConectado) {
+    handleTelnetClients();
     Arduino();
 
     if (millis() - ultAviso >= 10000) {
@@ -99,7 +112,8 @@ void setup() {
       ultAviso = millis();
     }
 
-    delay(100);
+    yield();
+    delay(50);
   }
 
   // --- INICIALIZAR RESERVAS DE FORMA LOCAL ---
@@ -123,44 +137,55 @@ void setup() {
   obtenerReservasActivas();
   
   // --- SERVIDOR WEB ---
-  if (!setupWebServer()) { telnetLog("❌ Error al iniciar el servidor web"); return;}
+  setupWebServer();
   
+  inicio = true;
   telnetLog("✅ Sistema iniciado (ESP8266)");
 }
 
 void loop() {
   // --- TELNET LOGGER ---
-  WiFiClient newClient = telnetServer.available();
-  if (newClient) {
-    if (!telnetClient || !telnetClient.connected()) {
-      if (telnetClient) telnetClient.stop();
-      telnetClient = newClient;
-      telnetLog("== Cliente Telnet conectado ==");
-      telnetLog(String("IP: ") + telnetClient.remoteIP().toString());
-    } else {
-      // rechazar clientes extras
-      newClient.stop();
+  handleTelnetClients();
+
+  while (inicio) {
+    // --- TELNET LOGGER ---
+    handleTelnetClients();
+
+    // --- SOLICITUDES HTTP --
+    server.handleClient();
+    
+    // --- OTROS --
+    Arduino();
+    RFID();
+    
+    // --- ACTUALIZAR RESERVAS CADA 15M --
+    if (millis() - ultReservasCheck > TIEMPO_OBTENER_RESERVAS) {
+      obtenerReservasActivas();
+      ultReservasCheck = millis();
     }
-  }
-  // --- SOLICITUDES HTTP --
-  server.handleClient();
-  
-  // --- OTROS --
-  Arduino();
-  RFID();
-  
-  // --- ACTUALIZAR RESERVAS CADA 15M --
- if (millis() - ultReservasCheck > TIEMPO_OBTENER_RESERVAS) {
-   obtenerReservasActivas();
-   ultReservasCheck = millis();
+
+    yield();
   }
 }
 
 // --- FUNCIONES ---
 
 void telnetLog(const String &msg) {
+  String timestamp = "[" + String(millis() / 1000) + "s] ";
+  String fullMsg = timestamp + msg;
+  
+  //Serial.println(fullMsg);
+  
+  if (!telnetReady) {
+    // Acumular en buffer si telnet no está listo
+    logBuffer += fullMsg + "\n";
+    return;
+  }
+  
+  // Enviar a todos los clientes telnet conectados
   if (telnetClient && telnetClient.connected()) {
-    telnetClient.println(msg);
+    telnetClient.println(fullMsg);
+    telnetClient.flush();
   }
 }
 
@@ -171,20 +196,101 @@ bool esUIDValido(byte* uid) {
   return true;
 }
 
+void handleTelnetClients() {
+  WiFiClient newClient = telnetServer.available();
+  if (newClient) {
+    if (!telnetClient || !telnetClient.connected()) {
+      if (telnetClient) telnetClient.stop();
+      telnetClient = newClient;
+      telnetLog("== Cliente Telnet conectado ==");
+      telnetLog("IP: " + telnetClient.remoteIP().toString());
+      telnetLog("Puerto: " + String(telnetClient.remotePort()));
+      telnetClient.println("=== ESP8266 ParkElite v1.0 ===");
+      telnetClient.println("Conexion establecida");
+      telnetClient.println("Estado Arduino: " + String(arduinoConectado ? "Conectado" : "Desconectado"));
+      telnetClient.println("WiFi IP: " + WiFi.localIP().toString());
+      telnetClient.println("===========================");
+    } else {
+      newClient.println("Solo se permite una conexion simultanea");
+      newClient.stop();
+    }
+  }
+
+  // Verificar si el cliente actual sigue conectado
+  if (telnetClient && !telnetClient.connected()) {
+    telnetLog("=== Cliente Telnet desconectado ===");
+    telnetClient.stop();
+    telnetClient = WiFiClient();
+  }
+  
+  if (telnetClient && telnetClient.connected() && telnetClient.available()) {
+    String command = telnetClient.readStringUntil('\n');
+    command.trim();
+    
+    if (command.length() > 0) {
+      telnetLog("COMANDO TELNET: " + command);
+      
+      // Procesar comandos especiales
+      if (command == "help") {
+        telnetClient.println("Comandos disponibles:");
+        telnetClient.println("  help - Mostrar esta ayuda");
+        telnetClient.println("  status - Estado del sistema");
+        telnetClient.println("  reservas - Mostrar reservas activas");
+        telnetClient.println("  reset - Reiniciar ESP8266");
+        telnetClient.println("  arduino - Enviar PING a Arduino");
+      }
+      else if (command == "status") {
+        telnetClient.println("=== ESTADO DEL SISTEMA ===");
+        telnetClient.println("WiFi: " + String(WiFi.status() == WL_CONNECTED ? "Conectado" : "Desconectado"));
+        telnetClient.println("Arduino: " + String(arduinoConectado ? "Conectado" : "Desconectado"));
+        telnetClient.println("IP: " + WiFi.localIP().toString());
+        telnetClient.println("Uptime: " + String(millis() / 1000) + "s");
+      }
+      else if (command == "reservas") {
+        mostrarEstadosReservas();
+      }
+      else if (command == "reset") {
+        telnetClient.println("Reiniciando ESP8266...");
+        telnetClient.flush();
+        delay(1000);
+        ESP.restart();
+      }
+      else if (command == "arduino") {
+        Serial.println("PING");
+        telnetLog("→ PING manual enviado a Arduino");
+      }
+    }
+  }
+}
+
 bool wifiConnect() {
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  telnetLog("🔌 Conectando WiFi (ESP8266)");
+  
+  String msg = "🔌 Conectando WiFi (ESP8266)";
+  Serial.print(msg);
+  if (telnetReady) telnetLog(msg);
+  
   unsigned long start = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - start < 15000) {
     delay(500);
-    telnetLog('.');
+    Serial.print('.');
+    if (telnetReady) telnetLog(".");
   }
-  telnetLog();
+  
   if (WiFi.status() == WL_CONNECTED) {
-    telnetLog("✅ WiFi conectado (ESP8266)");
-    telnetLog("💻 IPv4: ");
-    telnetLog(WiFi.localIP());
+    String successMsg = "✅ WiFi conectado (ESP8266)";
+    String ipMsg = "💻 IPv4: " + WiFi.localIP().toString();
+    
+    Serial.println(successMsg);
+    Serial.println(ipMsg);
+    
+    if (telnetReady) {
+      telnetLog(successMsg);
+      telnetLog(ipMsg);
+    } else {
+      logBuffer += successMsg + "\n" + ipMsg + "\n";
+    }
     return true;
   }
   return false;
@@ -196,7 +302,7 @@ void Arduino() {
   if (millis() - ultPing >= TIEMPO_PING) {
     Serial.println("PING");
     ultPing = millis();
-    telnetLog("→ PING enviado");
+    //telnetLog("→ PING enviado");
   }
 
   while (Serial.available()) {
@@ -251,7 +357,7 @@ void mostrarEstadosReservas() {
     telnetLog("😑 No hay reservas activas (ESP8266)");
   }
 
-  telnetLog("🔌 Arduino: " + String(arduinoConnected ? "Conectado" : "Desconectado"));
+  telnetLog("🔌 Arduino: " + String(arduinoConectado ? "Conectado" : "Desconectado"));
   
   telnetLog("🚗 Ocupación: [");
   for (int i = 0; i < 4; i++) {
@@ -271,7 +377,7 @@ void RFID() {
   if (esUIDValido(mfrc522.uid.uidByte)) {
     telnetLog("✅ RFID Tag válido, enviando orden... (ESP8266)");
     if (arduinoConectado) {
-      enviarComandoArduino("ABRIR");
+      procesarComandosArduino("ABRIR");
     } else {
       telnetLog("⚠️ Arduino desconectado (ESP8266)");
     }
@@ -285,7 +391,7 @@ void RFID() {
 void confirmarLlegada(String reservationId) {
   WiFiClient client;
   HTTPClient http;
-  String url = String("https://") + API_HOST_DOMAIN + ENDPOINT_CONFIRM_ARRIVAL + "/" + reservationId;
+  String url = String("http://") + API_HOST_DOMAIN + ENDPOINT_CONFIRM_ARRIVAL + "/" + reservationId;
   
   StaticJsonDocument<128> doc;
   doc["reservationId"] = reservationId;
@@ -304,7 +410,7 @@ void confirmarLlegada(String reservationId) {
 void cancelarReserva(String reservationId) {
   WiFiClient client;
   HTTPClient http;
-  String url = String("https://") + API_HOST_DOMAIN + ENDPOINT_CANCEL_SPECIFIC_RESERVATION + "/" + reservationId;
+  String url = String("http://") + API_HOST_DOMAIN + ENDPOINT_CANCEL_SPECIFIC_RESERVATION + "/" + reservationId;
   
   http.begin(client, url);
   http.addHeader("Content-Type", "application/json");
@@ -316,9 +422,9 @@ void cancelarReserva(String reservationId) {
 }
 
 void checkOcupacionesYConfirmar() {
-  if (!arduinoConnected) return;
+  if (!arduinoConectado) return;
   
-  enviarComandoArduino("CONSULTAR_OCUPACION");
+  procesarComandosArduino("CONSULTAR_OCUPACION");
   
   // checkear confirmaciones pendientes
   for (int i = 0; i < 4; i++) {
@@ -382,7 +488,7 @@ void procesarComandosArduino(String message) {
   if (message == "PONG") {
     arduinoConectado = true;
     ultPing = millis();
-    //enviarComandoArduino("STATUS_REQUEST");
+    //procesarComandosArduino("STATUS_REQUEST");
   }
   else if (message == "BARRERA_ABIERTA") {
     telnetLog("✅ Barrera abierta confirmada");
@@ -470,7 +576,7 @@ void obtenerReservasActivas() {
   
   WiFiClient client;
   HTTPClient http;
-  String url = String("https://") + API_HOST_DOMAIN + ENDPOINT_GET_ACTIVE_RESERVATIONS;
+  String url = String("http://") + API_HOST_DOMAIN + ENDPOINT_GET_ACTIVE_RESERVATIONS;
   
   http.begin(client, url);
   http.addHeader("Content-Type", "application/json");
@@ -554,7 +660,7 @@ void webCodigo() {
 
   WiFiClient client;
   HTTPClient http;
-  String url = String("https://") + API_HOST_DOMAIN + ENDPOINT_CHECKCODE;
+  String url = String("http://") + API_HOST_DOMAIN + ENDPOINT_CHECKCODE;
   http.begin(client, url);
   http.addHeader("Content-Type", "application/json");
   int statusCode = http.POST(payload);
@@ -578,7 +684,7 @@ void webCodigo() {
 
   if (allowed) {
     if (arduinoConectado) {
-      enviarComandoArduino("ABRIR");
+      procesarComandosArduino("ABRIR");
     } else {
       telnetLog("⚠️ Arduino desconectado, no se puede abrir barrera (ESP8266)");
     }
