@@ -39,10 +39,10 @@ unsigned long ultOcupacionPlazaCheck = 0;
 unsigned long ultPing = 0;
 unsigned long ultReservasCheck = 0;
 
-const unsigned long TIEMPO_CHECK_RFID = 100;
-const unsigned long TIEMPO_CHECK_OCUPACION = 5000;
-const unsigned long TIEMPO_PING = 100000;
-const unsigned long TIEMPO_OBTENER_RESERVAS = 150000;
+const unsigned long TIEMPO_CHECK_RFID = 100; // 100 ms
+const unsigned long TIEMPO_CHECK_OCUPACION = 5000; // 5 segundos
+const unsigned long TIEMPO_PING = 120000; // 2 minutos
+const unsigned long TIEMPO_OBTENER_RESERVAS = 600000; // 10 minutos
 
 // --- VARIABLES BASE ---
 struct ActiveReservation {
