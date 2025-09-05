@@ -693,6 +693,8 @@ void webCodigo() {
     for (int i = 0; i < 4; i++) {
       if (activeReservations[i].userCode == code && !activeReservations[i].confirmed) {
         activeReservations[i].startTime = millis(); // Actualizar tiempo de llegada
+        confirmarLlegada(activeReservations[i].reservationId);
+        activeReservations[i].confirmed = true;
         telnetLog("✅ Acceso concedido para reserva: " + activeReservations[i].reservationId + " (ESP8266)");
         break;
       }
