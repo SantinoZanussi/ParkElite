@@ -13,7 +13,7 @@ class ApiService {
   
   final String localNetworkIP = "192.168.0.24";
   final String localNetworkIPEscuela = "192.168.2.165";
-  final String serverNetworkDomain = "parkelite.onrender.com";
+  final String serverNetworkDomain = "192.168.2.131:3000"; // parkelite.onrender.com
   late final String baseUrl;
   bool _isInitialized = false;
 
@@ -28,9 +28,9 @@ class ApiService {
 
       baseUrl = isEmulator
           ? 'http://10.0.2.2:3000/api' // Emulador Android
-          : 'https://$serverNetworkDomain/api'; // Dispositivo físico Android
+          : 'http://$serverNetworkDomain/api'; // Dispositivo físico Android
     } else {
-      baseUrl = 'https://$serverNetworkDomain/api'; // iOS físico o emulador
+      baseUrl = 'http://$serverNetworkDomain/api'; // iOS físico o emulador
     }
     
     _isInitialized = true;

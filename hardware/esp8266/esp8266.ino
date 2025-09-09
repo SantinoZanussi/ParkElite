@@ -236,6 +236,7 @@ void handleTelnetClients() {
         telnetClient.println("  help - Mostrar esta ayuda");
         telnetClient.println("  status - Estado del sistema");
         telnetClient.println("  reservas - Mostrar reservas activas");
+        telnetClient.println("  update - Actualizar reservas activas");
         telnetClient.println("  reset - Reiniciar ESP8266");
         telnetClient.println("  arduino - Enviar PING a Arduino");
       }
@@ -248,6 +249,9 @@ void handleTelnetClients() {
       }
       else if (command == "reservas") {
         mostrarEstadosReservas();
+      }
+      else if (command == "update") {
+        obtenerReservasActivas();
       }
       else if (command == "reset") {
         telnetClient.println("Reiniciando ESP8266...");
@@ -376,11 +380,7 @@ void RFID() {
 
   if (esUIDValido(mfrc522.uid.uidByte)) {
     telnetLog("✅ RFID Tag válido, enviando orden... (ESP8266)");
-    if (arduinoConectado) {
-      procesarComandosArduino("ABRIR");
-    } else {
-      telnetLog("⚠️ Arduino desconectado (ESP8266)");
-    }
+    Serial.println("ABRIR");
     delay(1000);
   }
 
@@ -424,7 +424,7 @@ void cancelarReserva(String reservationId) {
 void checkOcupacionesYConfirmar() {
   if (!arduinoConectado) return;
   
-  procesarComandosArduino("CONSULTAR_OCUPACION");
+  Serial.println("CONSULTAR_OCUPACION");
   
   // checkear confirmaciones pendientes
   for (int i = 0; i < 4; i++) {
@@ -484,6 +484,18 @@ void procesarComandosArduino(String message) {
   SYSTEM_STATUS:SENSORS_OK:<estados>:BARRIER_OK:1	Estado completo de sensores y barrera. Indica si sensores están funcionando y si barrera está operativa.
   SENSORS_RESET_OK	Confirma que los sensores fueron reseteados tras el comando RESET_SENSORS.
   */
+
+  const char* comandos_esp[] = {"PING", "ABRIR", "CONSULTAR_OCUPACION", "STATUS_REQUEST", "RESRT_SENSORS"};
+  bool coincide = false;
+
+  for (int i = 0; i < 5; i++) {
+    if (strcmp(message.c_str(), comandos_esp[i]) == 0) {
+      coincide = true;
+      break;
+    }
+  }
+
+  if (coincide) return;
 
   if (message == "PONG") {
     arduinoConectado = true;
@@ -681,23 +693,27 @@ void webCodigo() {
 
   bool allowed = res["allowed"];
   int spotNumber = res.containsKey("spotId") ? res["spotId"].as<int>() : -1;
+  bool matched = false;
 
   if (allowed) {
-    if (arduinoConectado) {
-      procesarComandosArduino("ABRIR");
-    } else {
-      telnetLog("⚠️ Arduino desconectado, no se puede abrir barrera (ESP8266)");
-    }
+    Serial.println("ABRIR");
     
     // busca reserva activa por código
     for (int i = 0; i < 4; i++) {
-      if (activeReservations[i].userCode == code && !activeReservations[i].confirmed) {
-        activeReservations[i].startTime = millis(); // Actualizar tiempo de llegada
-        confirmarLlegada(activeReservations[i].reservationId);
-        activeReservations[i].confirmed = true;
-        telnetLog("✅ Acceso concedido para reserva: " + activeReservations[i].reservationId + " (ESP8266)");
+      if (activeReservations[i].userCode == code) {
+        matched = true;
+        if (activeReservations[i].confirmed) {
+          activeReservations[i].startTime = millis();
+          confirmarLlegada(activeReservations[i].reservationId);
+        } else {
+          telnetLog("ℹ️ La reserva no esta confirmada: " + activeReservations[i].reservationId + " (ESP8266)");
+        }
         break;
       }
+    }
+
+    if (!matched) {
+      telnetLog("❌ Código válido, pero no aparece en activeReservations: " + code);
     }
   }
 

@@ -275,7 +275,6 @@ exports.getOccupancyStats = async (req, res) => {
 };
 
 exports.confirm_arrival = async (req, res) => {
-  console.log('Confirming arrival...');
   const reservationId = req.params.reservationId;
   const reservation = await Reservation.findOne({
     _id: reservationId,
@@ -283,7 +282,9 @@ exports.confirm_arrival = async (req, res) => {
   });
   if (!reservation) return res.status(404).json({ message: 'Reserva no encontrada', allowed: false });
   if (reservation.status === 'confirmado') {
-    return res.json({ message: 'La reserva confirmada', allowed: true, reservation });
+    reservation.status = 'completado';
+    await reservation.save();
+    return res.json({ message: 'La reserva ya fue confirmada', allowed: true, reservation });
   }
 }
 
