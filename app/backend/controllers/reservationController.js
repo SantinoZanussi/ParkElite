@@ -96,21 +96,21 @@ exports.createReservation = async (req, res) => {
     const endDay = new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
 
     // si el usuario ya tiene una reserva para ese día
-    const existingReservation = await Reservation.findOne({
-      userId: req.user.id,
-      code: userInfo.code,
-      reservationDate: {
-        $gte: startDay,
-        $lt: endDay
-      },
-      status: { $ne: 'cancelado' }
-    });
+    // const existingReservation = await Reservation.findOne({
+    //   userId: req.user.id,
+    //   code: userInfo.code,
+    //   reservationDate: {
+    //     $gte: startDay,
+    //     $lt: endDay
+    //   },
+    //   status: { $ne: 'cancelado' }
+    // });
 
-    if (existingReservation) {
-      return res.status(400).json({ 
-        message: 'Ya tienes una reserva para este día. Solo se permite una reserva por día.' 
-      });
-    }
+    // if (existingReservation) {
+    //   return res.status(400).json({ 
+    //     message: 'Ya tienes una reserva para este día. Solo se permite una reserva por día.' 
+    //   });
+    // }
 
     const availableSpot = await findAvailableSpot(reservationDate, startTime, endTime);
     
