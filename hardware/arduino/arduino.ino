@@ -24,12 +24,12 @@ unsigned long tiempoDeteccion[4] = {0, 0, 0, 0};
 bool estadoAnterior[4] = {false, false, false, false};
 bool ocupacionConfirmada[4] = {false, false, false, false};
 const unsigned long TIEMPO_CONFIRMACION = 60000;
-const int DISTANCIA_OCUPADO = 20; // cm
+const int DISTANCIA_OCUPADO = 5; // cm
 
 bool espConectado = false;
 unsigned long ultRespuestaEsp = 0;
 
-const int SENSOR_TO_SPOT[4] = {3, 4, 5, 6};
+const int SENSOR_TO_SPOT[4] = {4, 6, 3, 5};
 
 void setup() {
   Serial.begin(9600);

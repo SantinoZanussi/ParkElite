@@ -33,6 +33,8 @@ router.post('/confirm-arrival/:reservationId', reservationController.confirm_arr
 // cancelar llegada por expiración
 router.post('/cancel-arrival', reservationController.cancel_expired);
 
+router.post('/complete-arrival/:reservationId', reservationController.complete_arrival);
+
 // marcar reserva como completada (por si acaso)
 router.put('/complete/:reservationId', reservationController.markReservationAsCompleted);
 

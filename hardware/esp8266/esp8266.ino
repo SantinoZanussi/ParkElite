@@ -1,1000 +1,1118 @@
-// --- ESP8266 - ParkElite (1.0) ---
+  // --- ESP8266 - ParkElite (1.0) ---
 
-#include <ESP8266WiFi.h>
-#include <ESP8266HTTPClient.h>
-#include <ESP8266WebServer.h>
-#include <ArduinoJson.h>
-#include <SPI.h>
-#include <MFRC522.h>
+  #include <ESP8266WiFi.h>
+  #include <ESP8266HTTPClient.h>
+  #include <WiFiClientSecure.h>
+  #include <ESP8266WebServer.h>
+  #include <ArduinoJson.h>
+  #include <SPI.h>
+  #include <MFRC522.h>
 
-// --- CONFIGURACIÓN ---
-const char* WIFI_SSID         = "LAPTOP ANEXO 1";
-const char* WIFI_PASSWORD     = "Anexo2043";
-const char* API_HOST_DOMAIN   = "192.168.137.1:3000";
+  // --- CONFIGURACIÓN ---
+  const char* WIFI_SSID         = "LAPTOP ANEXO 1";
+  const char* WIFI_PASSWORD     = "Anexo2043";
+  const char* API_HOST_DOMAIN   = "parkelite.onrender.com";
 
-// --- RUTAS API ---
-static const char* ENDPOINT_CHECKHEALTHSERVER = "/api/health-check";
-static const char* ENDPOINT_CHECKCODE = "/api/reservas/checkCode";
-static const char* ENDPOINT_CONFIRM_ARRIVAL = "/api/reservas/confirm-arrival";
-static const char* ENDPOINT_CANCEL_RESERVATION = "/api/reservas/cancel-arrival";
-static const char* ENDPOINT_CANCEL_SPECIFIC_RESERVATION = "/api/reservas/cancel";
-static const char* ENDPOINT_GET_ACTIVE_RESERVATIONS = "/api/reservas/active-reservations";
+  // --- RUTAS API ---
+  static const char* ENDPOINT_CHECKHEALTHSERVER = "/api/health-check";
+  static const char* ENDPOINT_CHECKCODE = "/api/reservas/checkCode";
+  static const char* ENDPOINT_CONFIRM_ARRIVAL = "/api/reservas/confirm-arrival";
+  static const char* ENDPOINT_COMPLETE_ARRIVAL = "/api/reservas/complete-arrival";
+  static const char* ENDPOINT_CANCEL_RESERVATION = "/api/reservas/cancel-arrival";
+  static const char* ENDPOINT_CANCEL_SPECIFIC_RESERVATION = "/api/reservas/cancel";
+  static const char* ENDPOINT_GET_ACTIVE_RESERVATIONS = "/api/reservas/active-reservations";
 
-// --- PINES RFID ---
-#define SS_PIN D8
-#define RST_PIN D4
+  // --- PINES RFID ---
+  #define SS_PIN D8
+  #define RST_PIN D4
 
-// --- SERVIDOR WEB, LOGGER, Y LECTOR RFID ---
-WiFiServer telnetServer(23);
-WiFiClient telnetClient;
-ESP8266WebServer server(80);
-MFRC522 mfrc522(SS_PIN, RST_PIN);
+  // --- SERVIDOR WEB, LOGGER, Y LECTOR RFID ---
+  WiFiServer telnetServer(23);
+  WiFiClient telnetClient;
+  ESP8266WebServer server(80);
+  MFRC522 mfrc522(SS_PIN, RST_PIN);
 
-// --- RFIDs AUTORIZADOS ---
-const byte uid1[] = {0x03, 0x77, 0xFF, 0x13};
+  // --- RFIDs AUTORIZADOS ---
+  const byte uid1[] = {0x03, 0x77, 0xFF, 0x13};
 
-// --- TIEMPOS ---
-unsigned long ultRFIDCheck = 0;
-unsigned long ultOcupacionPlazaCheck = 0;
-unsigned long ultPing = 0;
-unsigned long ultReservasCheck = 0;
+  // --- TIEMPOS ---
+  unsigned long ultRFIDCheck = 0;
+  unsigned long ultOcupacionPlazaCheck = 0;
+  unsigned long ultPing = 0;
+  unsigned long ultReservasCheck = 0;
+  unsigned long ultExpiracionCheck = 0;
 
-const unsigned long TIEMPO_CHECK_RFID = 100; // 100 ms
-const unsigned long TIEMPO_CHECK_OCUPACION = 5000; // 5 segundos
-const unsigned long TIEMPO_PING = 120000; // 2 minutos
-const unsigned long TIEMPO_OBTENER_RESERVAS = 600000; // 10 minutos
+  const unsigned long TIEMPO_CHECK_RFID = 100; // 100 ms
+  const unsigned long TIEMPO_CHECK_OCUPACION = 5000; // 5 segundos
+  const unsigned long TIEMPO_PING = 120000; // 2 minutos
+  const unsigned long TIEMPO_OBTENER_RESERVAS = 600000; // 10 minutos
+  const unsigned long TIEMPO_CHECK_EXPIRADAS = 180000; // 3 minutos
 
-// --- VARIABLES BASE ---
-struct ActiveReservation {
-  String reservationId;
-  int spotNumber;
-  unsigned long startTime;
-  bool confirmed;
-  String userCode;
-};
+  // --- VARIABLES BASE ---
+  struct ActiveReservation {
+    String reservationId;
+    int spotNumber;
+    unsigned long startTime;
+    bool confirmed;
+    String userCode;
+  };
 
-String logBuffer = "";
-bool telnetReady = false;
-bool arduinoConectado = false;
-bool inicio = false;
-ActiveReservation activeReservations[4];
-bool spotOccupied[4] = {false, false, false, false};
-int spotMapping[4] = {3, 4, 5, 6}; // Plazas
+  String logBuffer = "";
+  bool telnetReady = false;
+  bool arduinoConectado = false;
+  bool inicio = false;
+  ActiveReservation activeReservations[4];
+  bool spotOccupied[4] = {false, false, false, false};
+  int spotMapping[4] = {4, 6, 3, 5}; // Plazas
 
-// --- PROTOTIPOS ---
-bool wifiConnect();
-void setupWebServer();
-void webPrincipal();
-void webCodigo();
-void RFID();
-bool esUIDValido(byte* uid);
-String generateResultHTML(const String& title, const String& message, bool isError = false);
-void confirmarLlegada(String reservationId);
-void cancelarReserva(String reservationId);
-void procesarComandosArduino(String message);
-void obtenerReservasActivas();
-void mostrarEstadosReservas();
-void checkOcupacionesYConfirmar();
-void checkReservasExpiradasCanceladas();
-void Arduino();
-int getSpotIndex(int spotNumber);
-void telnetLog(const String &msg);
+  // --- PROTOTIPOS ---
+  bool wifiConnect();
+  void testServer();
+  int httpGetWithRetry(const String& url, String& out);
+  void setupWebServer();
+  void webPrincipal();
+  void webCodigo();
+  void RFID();
+  bool esUIDValido(byte* uid);
+  String generateResultHTML(const String& title, const String& message, bool isError = false);
+  void completarLlegada(String reservationId);
+  void confirmarLlegada(String reservationId);
+  bool cancelarReserva(String reservationId);
+  void procesarComandosArduino(String message);
+  void obtenerReservasActivas();
+  void mostrarEstadosReservas();
+  void checkReservasExpiradasCanceladas();
+  void Arduino();
+  int getSpotIndex(int spotNumber);
+  void telnetLog(const String &msg);
 
-void setup() {
-  Serial.begin(9600);
-  delay(200);
-  
-  // --- WIFI ---
-  if (!wifiConnect()) { telnetLog("❌ Error al conectar el WiFi"); return; }
+  void setup() {
+    Serial.begin(9600);
+    delay(200);
+    
+    // --- WIFI ---
+    if (!wifiConnect()) { telnetLog("❌ Error al conectar el WiFi"); return; }
 
-  telnetServer.begin();
-  telnetServer.setNoDelay(true);
-  telnetReady = true;
+    telnetServer.begin();
+    telnetServer.setNoDelay(true);
+    telnetReady = true;
 
-  if (logBuffer.length() > 0) {
-    telnetLog("=== LOGS PREVIOS ===");
-    telnetLog(logBuffer);
-    telnetLog("=== FIN LOGS PREVIOS ===");
-    logBuffer = "";
-  }
-
-  telnetLog("❗ ESP8266 - ParkElite v1.0 iniciando...");
-
-  // --- ARDUINO ---
-  unsigned long ultAviso = millis();
-  telnetLog("🔌 Conectando con Arduino... (ESP8266)");
-  while (!arduinoConectado) {
-    handleTelnetClients();
-    Arduino();
-
-    if (millis() - ultAviso >= 10000) {
-      telnetLog("⏳ Esperando conexión con Arduino... (ESP8266)");
-      ultAviso = millis();
+    if (logBuffer.length() > 0) {
+      telnetLog("=== LOGS PREVIOS ===");
+      telnetLog(logBuffer);
+      telnetLog("=== FIN LOGS PREVIOS ===");
+      logBuffer = "";
     }
 
-    yield();
-    delay(50);
-  }
+    telnetLog("❗ ESP8266 - ParkElite v1.0 iniciando...");
 
-  // --- INICIALIZAR RESERVAS DE FORMA LOCAL ---
-  for (int i = 0; i < 4; i++) {
-    activeReservations[i].reservationId = "";
-    activeReservations[i].spotNumber = -1;
-    activeReservations[i].startTime = 0;
-    activeReservations[i].confirmed = false;
-    activeReservations[i].userCode = "";
-  }
-  telnetLog("✅ Variables locales inicializadas (ESP8266)");
-  
-  // --- RFID ---
-  SPI.begin();
-  mfrc522.PCD_Init();
-  telnetLog("✅ RFID RC522 inicializado (ESP8266)");
+    // --- ARDUINO ---
+    unsigned long ultAviso = millis();
+    telnetLog("🔌 Conectando con Arduino... (ESP8266)");
+    while (!arduinoConectado) {
+      handleTelnetClients();
+      Arduino();
 
-  // --- RESERVAS ---
-  delay(2000);
-  telnetLog("🔄 Iniciando sincronización inicial... (ESP8266)");
-  obtenerReservasActivas();
-  
-  // --- SERVIDOR WEB ---
-  setupWebServer();
-  
-  inicio = true;
-  telnetLog("✅ Sistema iniciado (ESP8266)");
-}
+      if (millis() - ultAviso >= 10000) {
+        telnetLog("⏳ Esperando conexión con Arduino... (ESP8266)");
+        ultAviso = millis();
+      }
 
-void loop() {
-  // --- TELNET LOGGER ---
-  handleTelnetClients();
-
-  while (inicio) {
-    // --- TELNET LOGGER ---
-    handleTelnetClients();
-
-    // --- SOLICITUDES HTTP --
-    server.handleClient();
-    
-    // --- OTROS --
-    Arduino();
-    RFID();
-    
-    // --- ACTUALIZAR RESERVAS CADA 15M --
-    if (millis() - ultReservasCheck > TIEMPO_OBTENER_RESERVAS) {
-      obtenerReservasActivas();
-      ultReservasCheck = millis();
+      yield();
+      delay(50);
     }
 
-    yield();
-  }
-}
+    // --- CHECKEAR SI EL SERVIDOR FUNCIONA ---
+    testServer();
 
-// --- FUNCIONES ---
-
-void telnetLog(const String &msg) {
-  String timestamp = "[" + String(millis() / 1000) + "s] ";
-  String fullMsg = timestamp + msg;
-  
-  //Serial.println(fullMsg);
-  
-  if (!telnetReady) {
-    // Acumular en buffer si telnet no está listo
-    logBuffer += fullMsg + "\n";
-    return;
-  }
-  
-  // Enviar a todos los clientes telnet conectados
-  if (telnetClient && telnetClient.connected()) {
-    telnetClient.println(fullMsg);
-    telnetClient.flush();
-  }
-}
-
-bool esUIDValido(byte* uid) {
-  for (byte i = 0; i < 4; i++) {
-    if (uid[i] != uid1[i]) return false;
-  }
-  return true;
-}
-
-void handleTelnetClients() {
-  WiFiClient newClient = telnetServer.available();
-  if (newClient) {
-    if (!telnetClient || !telnetClient.connected()) {
-      if (telnetClient) telnetClient.stop();
-      telnetClient = newClient;
-      telnetLog("== Cliente Telnet conectado ==");
-      telnetLog("IP: " + telnetClient.remoteIP().toString());
-      telnetLog("Puerto: " + String(telnetClient.remotePort()));
-      telnetClient.println("=== ESP8266 ParkElite v1.0 ===");
-      telnetClient.println("Conexion establecida");
-      telnetClient.println("Estado Arduino: " + String(arduinoConectado ? "Conectado" : "Desconectado"));
-      telnetClient.println("WiFi IP: " + WiFi.localIP().toString());
-      telnetClient.println("===========================");
-    } else {
-      newClient.println("Solo se permite una conexion simultanea");
-      newClient.stop();
-    }
-  }
-
-  // Verificar si el cliente actual sigue conectado
-  if (telnetClient && !telnetClient.connected()) {
-    telnetLog("=== Cliente Telnet desconectado ===");
-    telnetClient.stop();
-    telnetClient = WiFiClient();
-  }
-  
-  if (telnetClient && telnetClient.connected() && telnetClient.available()) {
-    String command = telnetClient.readStringUntil('\n');
-    command.trim();
-    
-    if (command.length() > 0) {
-      telnetLog("COMANDO TELNET: " + command);
-      
-      // Procesar comandos especiales
-      if (command == "help") {
-        telnetClient.println("Comandos disponibles:");
-        telnetClient.println("  help - Mostrar esta ayuda");
-        telnetClient.println("  status - Estado del sistema");
-        telnetClient.println("  reservas - Mostrar reservas activas");
-        telnetClient.println("  update - Actualizar reservas activas");
-        telnetClient.println("  reset - Reiniciar ESP8266");
-        telnetClient.println("  arduino - Enviar PING a Arduino");
-      }
-      else if (command == "status") {
-        telnetClient.println("=== ESTADO DEL SISTEMA ===");
-        telnetClient.println("WiFi: " + String(WiFi.status() == WL_CONNECTED ? "Conectado" : "Desconectado"));
-        telnetClient.println("Arduino: " + String(arduinoConectado ? "Conectado" : "Desconectado"));
-        telnetClient.println("IP: " + WiFi.localIP().toString());
-        telnetClient.println("Uptime: " + String(millis() / 1000) + "s");
-      }
-      else if (command == "reservas") {
-        mostrarEstadosReservas();
-      }
-      else if (command == "update") {
-        obtenerReservasActivas();
-      }
-      else if (command == "reset") {
-        telnetClient.println("Reiniciando ESP8266...");
-        telnetClient.flush();
-        delay(1000);
-        ESP.restart();
-      }
-      else if (command == "arduino") {
-        Serial.println("PING");
-        telnetLog("→ PING manual enviado a Arduino");
-      }
-    }
-  }
-}
-
-bool wifiConnect() {
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  
-  String msg = "🔌 Conectando WiFi (ESP8266)";
-  Serial.print(msg);
-  if (telnetReady) telnetLog(msg);
-  
-  unsigned long start = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - start < 15000) {
-    delay(500);
-    Serial.print('.');
-    if (telnetReady) telnetLog(".");
-  }
-  
-  if (WiFi.status() == WL_CONNECTED) {
-    String successMsg = "✅ WiFi conectado (ESP8266)";
-    String ipMsg = "💻 IPv4: " + WiFi.localIP().toString();
-    
-    Serial.println(successMsg);
-    Serial.println(ipMsg);
-    
-    if (telnetReady) {
-      telnetLog(successMsg);
-      telnetLog(ipMsg);
-    } else {
-      logBuffer += successMsg + "\n" + ipMsg + "\n";
-    }
-    return true;
-  }
-  return false;
-}
-
-// --- EVENTOS ---
-
-void Arduino() {
-  if (millis() - ultPing >= TIEMPO_PING) {
-    Serial.println("PING");
-    ultPing = millis();
-    //telnetLog("→ PING enviado");
-  }
-
-  while (Serial.available()) {
-    String mensaje = Serial.readStringUntil('\n');
-    mensaje.trim();
-    if (mensaje.length() > 0) {
-      telnetLog("← ARDUINO: " + mensaje);
-      procesarComandosArduino(mensaje);
-    }
-  }
-}
-
-void setupWebServer() {
-  server.on("/", HTTP_GET, webPrincipal);
-  server.on("/submit", HTTP_POST, webCodigo);
-  server.on("/status", HTTP_GET, []() {
-    String status = "{\"arduino\":";
-    status += arduinoConectado ? "true" : "false";
-    status += ",\"wifi\":";
-    status += (WiFi.status() == WL_CONNECTED) ? "true" : "false";
-    status += ",\"activeReservations\":";
-    
-    int count = 0;
+    // --- INICIALIZAR RESERVAS DE FORMA LOCAL ---
     for (int i = 0; i < 4; i++) {
-      if (activeReservations[i].reservationId.length() > 0) count++;
-    }
-    status += String(count) + "}";
-    
-    server.send(200, "application/json", status);
-  });
-  server.begin();
-  telnetLog("✅ Servidor web iniciado (ESP8266)");
-}
-
-void mostrarEstadosReservas() {
-  telnetLog("📋 Estado actual de reservas: (ESP8266)");
-  bool hasReservations = false;
-  
-  for (int i = 0; i < 4; i++) {
-    if (activeReservations[i].reservationId.length() > 0) {
-      hasReservations = true;
-      telnetLog("  Slot " + String(i + 1) + ":");
-      telnetLog("    - ID: " + activeReservations[i].reservationId);
-      telnetLog("    - Plaza: " + String(activeReservations[i].spotNumber));
-      telnetLog("    - Código: " + activeReservations[i].userCode);
-      telnetLog("    - Confirmado: " + String(activeReservations[i].confirmed ? "Sí" : "No"));
-      telnetLog("    - Tiempo: " + String((millis() - activeReservations[i].startTime) / 1000) + "s");
-    }
-  }
-  
-  if (!hasReservations) {
-    telnetLog("😑 No hay reservas activas (ESP8266)");
-  }
-
-  telnetLog("🔌 Arduino: " + String(arduinoConectado ? "Conectado" : "Desconectado"));
-  
-  telnetLog("🚗 Ocupación: [");
-  for (int i = 0; i < 4; i++) {
-    telnetLog(spotOccupied[i] ? "●" : "○");
-    if (i < 3) telnetLog(",");
-  }
-  telnetLog("] (Plazas " + String(spotMapping[0]) + "," + String(spotMapping[1]) + "," + 
-                String(spotMapping[2]) + "," + String(spotMapping[3]) + ")");
-}
-
-void RFID() {
-  if (millis() - ultRFIDCheck < TIEMPO_CHECK_RFID) return;
-  ultRFIDCheck = millis();
-
-  if (!mfrc522.PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial()) return;
-
-  if (esUIDValido(mfrc522.uid.uidByte)) {
-    telnetLog("✅ RFID Tag válido, enviando orden... (ESP8266)");
-    Serial.println("ABRIR");
-    delay(1000);
-  }
-
-  mfrc522.PICC_HaltA();
-  mfrc522.PCD_StopCrypto1();
-}
-
-void confirmarLlegada(String reservationId) {
-  WiFiClient client;
-  HTTPClient http;
-  String url = String("http://") + API_HOST_DOMAIN + ENDPOINT_CONFIRM_ARRIVAL + "/" + reservationId;
-  
-  StaticJsonDocument<128> doc;
-  doc["reservationId"] = reservationId;
-  String payload;
-  serializeJson(doc, payload);
-  
-  http.begin(client, url);
-  http.addHeader("Content-Type", "application/json");
-  http.setTimeout(5000);
-  int statusCode = http.POST(payload);
-  http.end();
-  
-  telnetLog("🚗 Confirmación de llegada - Status: " + String(statusCode));
-}
-
-void cancelarReserva(String reservationId) {
-  WiFiClient client;
-  HTTPClient http;
-  String url = String("http://") + API_HOST_DOMAIN + ENDPOINT_CANCEL_SPECIFIC_RESERVATION + "/" + reservationId;
-  
-  http.begin(client, url);
-  http.addHeader("Content-Type", "application/json");
-  http.setTimeout(5000);
-  int statusCode = http.DELETE();
-  http.end();
-  
-  telnetLog("Cancelación de reserva - Status: " + String(statusCode));
-}
-
-void checkOcupacionesYConfirmar() {
-  if (!arduinoConectado) return;
-  
-  Serial.println("CONSULTAR_OCUPACION");
-  
-  // checkear confirmaciones pendientes
-  for (int i = 0; i < 4; i++) {
-    if (activeReservations[i].reservationId.length() > 0 && 
-        !activeReservations[i].confirmed) {
-      
-      int spotIndex = getSpotIndex(activeReservations[i].spotNumber);
-      if (spotIndex >= 0 && spotOccupied[spotIndex]) {
-        confirmarLlegada(activeReservations[i].reservationId);
-        activeReservations[i].confirmed = true;
-        telnetLog("✅ Llegada confirmada para reserva " + activeReservations[i].reservationId + 
-                      " en plaza " + String(activeReservations[i].spotNumber));
-      }
-    }
-  }
-}
-
-void checkReservasExpiradasCanceladas() {
-  unsigned long currentTime = millis();
-  
-  for (int i = 0; i < 4; i++) {
-    if (activeReservations[i].reservationId.length() > 0 && 
-        !activeReservations[i].confirmed &&
-        (currentTime - activeReservations[i].startTime) > 1200000) { // 20 minutos
-      
-      telnetLog("⏰ Cancelando reserva expirada: " + activeReservations[i].reservationId);
-      cancelarReserva(activeReservations[i].reservationId);
-      
-      // limpiar reserva local
       activeReservations[i].reservationId = "";
       activeReservations[i].spotNumber = -1;
       activeReservations[i].startTime = 0;
       activeReservations[i].confirmed = false;
       activeReservations[i].userCode = "";
     }
-  }
-}
+    telnetLog("✅ Variables locales inicializadas (ESP8266)");
+    
+    // --- RFID ---
+    SPI.begin();
+    mfrc522.PCD_Init();
+    telnetLog("✅ RFID RC522 inicializado (ESP8266)");
 
-// --- MENSAJES ---
-
-void procesarComandosArduino(String message) {
-  /*
-  ESP8266 → ARDUINO:
-  PING	Comando de verificación de conexión. Arduino responde con PONG si está activo.
-  ABRIR	Orden para abrir la barrera. Arduino abre el servo 5 segundos y luego lo cierra automáticamente.
-  CONSULTAR_OCUPACION	Solicita el estado de ocupación de las plazas. Arduino responde con ESTADO_OCUPACION:....
-  STATUS_REQUEST	Solicita el estado completo del sistema (sensores y barrera). Arduino responde con SYSTEM_STATUS:....
-  RESET_SENSORS	Orden para reiniciar/resetear todos los sensores de ocupación. Arduino responde con SENSORS_RESET_OK.
-
-  ARDUINO → ESP8266:
-  PONG	Respuesta al PING enviado por ESP, confirma que Arduino está conectado.
-  BARRERA_ABIERTA	Confirma que la barrera fue abierta (respuesta al comando ABRIR).
-  SENSOR_DETECTING:<n>	Notifica que un sensor detectó un vehículo en la plaza <n>. Estado inicial antes de confirmar ocupación.
-  OCUPACION_CONFIRMADA:<n>	Confirma que la plaza <n> está ocupada después del tiempo de confirmación (60s).
-  LIBERADO:<n>	Notifica que la plaza <n> se liberó.
-  ESTADO_OCUPACION:<estados>:<plazas>	Envía el estado de ocupación de todas las plazas (1 = ocupada, 0 = libre). Incluye correspondencia de IDs de plaza.
-  SYSTEM_STATUS:SENSORS_OK:<estados>:BARRIER_OK:1	Estado completo de sensores y barrera. Indica si sensores están funcionando y si barrera está operativa.
-  SENSORS_RESET_OK	Confirma que los sensores fueron reseteados tras el comando RESET_SENSORS.
-  */
-
-  const char* comandos_esp[] = {"PING", "ABRIR", "CONSULTAR_OCUPACION", "STATUS_REQUEST", "RESRT_SENSORS"};
-  bool coincide = false;
-
-  for (int i = 0; i < 5; i++) {
-    if (strcmp(message.c_str(), comandos_esp[i]) == 0) {
-      coincide = true;
-      break;
-    }
+    // --- RESERVAS ---
+    delay(2000);
+    telnetLog("🔄 Iniciando sincronización inicial... (ESP8266)");
+    obtenerReservasActivas();
+    
+    // --- SERVIDOR WEB ---
+    setupWebServer();
+    
+    inicio = true;
+    telnetLog("✅ Sistema iniciado (ESP8266)");
   }
 
-  if (coincide) return;
+  void loop() {
+    // --- TELNET LOGGER ---
+    handleTelnetClients();
 
-  if (message == "PONG") {
-    arduinoConectado = true;
-    ultPing = millis();
-    //procesarComandosArduino("STATUS_REQUEST");
-  }
-  else if (message == "BARRERA_ABIERTA") {
-    telnetLog("✅ Barrera abierta confirmada");
-  }
-  else if (message.startsWith("OCUPACION_CONFIRMADA:")) {
-    int spotNumber = message.substring(21).toInt();
-    int spotIndex = getSpotIndex(spotNumber);
-    if (spotIndex >= 0) {
-      spotOccupied[spotIndex] = true;
-      telnetLog("🚗 Plaza " + String(spotNumber) + " ocupada confirmada");
-    }
-  }
-  else if (message.startsWith("LIBERADO:")) {
-    int spotNumber = message.substring(9).toInt();
-    int spotIndex = getSpotIndex(spotNumber);
-    if (spotIndex >= 0) {
-      spotOccupied[spotIndex] = false;
-      telnetLog("🅿️ Plaza " + String(spotNumber) + " liberada");
+    while (inicio) {
+      // --- TELNET LOGGER ---
+      handleTelnetClients();
+
+      // --- SOLICITUDES HTTP --
+      server.handleClient();
       
-      // Limpiar reserva confirmada
+      // --- OTROS --
+      Arduino();
+      RFID();
+      
+      // --- ACTUALIZAR RESERVAS CADA 15M --
+      if (millis() - ultReservasCheck > TIEMPO_OBTENER_RESERVAS) {
+        obtenerReservasActivas();
+        ultReservasCheck = millis();
+      }
+
+      if (millis() - ultExpiracionCheck > TIEMPO_CHECK_OCUPACION) {
+        checkReservasExpiradasCanceladas();
+        ultExpiracionCheck = millis();
+      }
+
+      yield();
+    }
+  }
+
+  // --- FUNCIONES ---
+
+  void telnetLog(const String &msg) {
+    String timestamp = "[" + String(millis() / 1000) + "s] ";
+    String fullMsg = timestamp + msg;
+    
+    //Serial.println(fullMsg);
+    
+    if (!telnetReady) {
+      // Acumular en buffer si telnet no está listo
+      logBuffer += fullMsg + "\n";
+      return;
+    }
+    
+    // Enviar a todos los clientes telnet conectados
+    if (telnetClient && telnetClient.connected()) {
+      telnetClient.println(fullMsg);
+      telnetClient.flush();
+    }
+  }
+
+  bool esUIDValido(byte* uid) {
+    for (byte i = 0; i < 4; i++) {
+      if (uid[i] != uid1[i]) return false;
+    }
+    return true;
+  }
+
+  void handleTelnetClients() {
+    WiFiClient newClient = telnetServer.available();
+    if (newClient) {
+      if (!telnetClient || !telnetClient.connected()) {
+        if (telnetClient) telnetClient.stop();
+        telnetClient = newClient;
+        telnetLog("== Cliente Telnet conectado ==");
+        telnetLog("IP: " + telnetClient.remoteIP().toString());
+        telnetLog("Puerto: " + String(telnetClient.remotePort()));
+        telnetClient.println("=== ESP8266 ParkElite v1.0 ===");
+        telnetClient.println("Conexion establecida");
+        telnetClient.println("Estado Arduino: " + String(arduinoConectado ? "Conectado" : "Desconectado"));
+        telnetClient.println("WiFi IP: " + WiFi.localIP().toString());
+        telnetClient.println("===========================");
+      } else {
+        newClient.println("Solo se permite una conexion simultanea");
+        newClient.stop();
+      }
+    }
+
+    // Verificar si el cliente actual sigue conectado
+    if (telnetClient && !telnetClient.connected()) {
+      telnetLog("=== Cliente Telnet desconectado ===");
+      telnetClient.stop();
+      telnetClient = WiFiClient();
+    }
+    
+    if (telnetClient && telnetClient.connected() && telnetClient.available()) {
+      String command = telnetClient.readStringUntil('\n');
+      command.trim();
+      
+      if (command.length() > 0) {
+        telnetLog("COMANDO TELNET: " + command);
+        
+        // Procesar comandos especiales
+        if (command == "help") {
+          telnetClient.println("Comandos disponibles:");
+          telnetClient.println("  help - Mostrar esta ayuda");
+          telnetClient.println("  status - Estado del sistema");
+          telnetClient.println("  reservas - Mostrar reservas activas");
+          telnetClient.println("  update - Actualizar reservas activas");
+          telnetClient.println("  reset - Reiniciar ESP8266");
+          telnetClient.println("  arduino - Enviar PING a Arduino");
+        }
+        else if (command == "status") {
+          telnetClient.println("=== ESTADO DEL SISTEMA ===");
+          telnetClient.println("WiFi: " + String(WiFi.status() == WL_CONNECTED ? "Conectado" : "Desconectado"));
+          telnetClient.println("Arduino: " + String(arduinoConectado ? "Conectado" : "Desconectado"));
+          telnetClient.println("IP: " + WiFi.localIP().toString());
+          telnetClient.println("Uptime: " + String(millis() / 1000) + "s");
+        }
+        else if (command == "reservas") {
+          mostrarEstadosReservas();
+        }
+        else if (command == "update") {
+          obtenerReservasActivas();
+        }
+        else if (command == "reset") {
+          telnetClient.println("Reiniciando ESP8266...");
+          telnetClient.flush();
+          delay(1000);
+          ESP.restart();
+        }
+        else if (command == "arduino") {
+          Serial.println("PING");
+          telnetLog("→ PING manual enviado a Arduino");
+        }
+      }
+    }
+  }
+
+  int httpGetWithRetry(const String& url, String& out) {
+    WiFiClientSecure client; client.setInsecure();
+    client.setTimeout(60000);
+    HTTPClient http;
+
+    for (int attempt = 1; attempt <= 3; attempt++) {
+      if (!http.begin(client, url)) {
+        telnetLog("❌ begin() fallo: " + url);
+        return -100;
+      }
+      http.setTimeout(60000);
+      http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+      http.useHTTP10(true);
+      http.setReuse(false);
+      http.setUserAgent("ParkElite-ESP8266/1.0");
+      http.addHeader("Accept", "application/json");
+
+      int code = http.GET();
+      if (code > 0) {
+        out = http.getString();
+        http.end();
+        telnetLog("🌐 GET ok (" + String(code) + ") intento " + String(attempt));
+        return code;
+      } else {
+        telnetLog("⚠️ GET error (" + String(code) + ") intento " + String(attempt));
+        http.end();
+        delay(500 * attempt);
+      }
+    }
+    return -11;
+  }
+
+  void testServer() {
+    String url = String("https://") + API_HOST_DOMAIN + ENDPOINT_CHECKHEALTHSERVER;
+    String body;
+    int code = httpGetWithRetry(url, body);
+    telnetLog("🩺 health-check status=" + String(code));
+    if (body.length()) telnetLog("↩︎ Body: " + body);
+  }
+
+
+
+  bool wifiConnect() {
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    
+    String msg = "🔌 Conectando WiFi (ESP8266)";
+    Serial.print(msg);
+    if (telnetReady) telnetLog(msg);
+    
+    unsigned long start = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - start < 15000) {
+      delay(500);
+      Serial.print('.');
+      if (telnetReady) telnetLog(".");
+    }
+    
+    if (WiFi.status() == WL_CONNECTED) {
+      String successMsg = "✅ WiFi conectado (ESP8266)";
+      String ipMsg = "💻 IPv4: " + WiFi.localIP().toString();
+      
+      Serial.println(successMsg);
+      Serial.println(ipMsg);
+      
+      if (telnetReady) {
+        telnetLog(successMsg);
+        telnetLog(ipMsg);
+      } else {
+        logBuffer += successMsg + "\n" + ipMsg + "\n";
+      }
+      return true;
+    }
+    return false;
+  }
+
+  // --- EVENTOS ---
+
+  void Arduino() {
+    if (millis() - ultPing >= TIEMPO_PING) {
+      Serial.println("PING");
+      ultPing = millis();
+      //telnetLog("→ PING enviado");
+    }
+
+    while (Serial.available()) {
+      String mensaje = Serial.readStringUntil('\n');
+      mensaje.trim();
+      if (mensaje.length() > 0) {
+        telnetLog("← ARDUINO: " + mensaje);
+        procesarComandosArduino(mensaje);
+      }
+    }
+  }
+
+  void setupWebServer() {
+    server.on("/", HTTP_GET, webPrincipal);
+    server.on("/submit", HTTP_POST, webCodigo);
+    server.on("/status", HTTP_GET, []() {
+      String status = "{\"arduino\":";
+      status += arduinoConectado ? "true" : "false";
+      status += ",\"wifi\":";
+      status += (WiFi.status() == WL_CONNECTED) ? "true" : "false";
+      status += ",\"activeReservations\":";
+      
+      int count = 0;
       for (int i = 0; i < 4; i++) {
-        if (activeReservations[i].spotNumber == spotNumber && activeReservations[i].confirmed) {
-          telnetLog("Limpiando reserva completada: " + activeReservations[i].reservationId);
+        if (activeReservations[i].reservationId.length() > 0) count++;
+      }
+      status += String(count) + "}";
+      
+      server.send(200, "application/json", status);
+    });
+    server.begin();
+    telnetLog("✅ Servidor web iniciado (ESP8266)");
+  }
+
+  void mostrarEstadosReservas() {
+    telnetLog("📋 Estado actual de reservas: (ESP8266)");
+    bool hasReservations = false;
+    
+    for (int i = 0; i < 4; i++) {
+      if (activeReservations[i].reservationId.length() > 0) {
+        hasReservations = true;
+        telnetLog("  Slot " + String(i + 1) + ":");
+        telnetLog("    - ID: " + activeReservations[i].reservationId);
+        telnetLog("    - Plaza: " + String(activeReservations[i].spotNumber));
+        telnetLog("    - Código: " + activeReservations[i].userCode);
+        telnetLog("    - Confirmado: " + String(activeReservations[i].confirmed ? "Sí" : "No"));
+        telnetLog("    - Tiempo: " + String((millis() - activeReservations[i].startTime) / 1000) + "s");
+      }
+    }
+    
+    if (!hasReservations) {
+      telnetLog("😑 No hay reservas activas (ESP8266)");
+    }
+
+    telnetLog("🔌 Arduino: " + String(arduinoConectado ? "Conectado" : "Desconectado"));
+    
+    telnetLog("🚗 Ocupación: [");
+    for (int i = 0; i < 4; i++) {
+      telnetLog(spotOccupied[i] ? "●" : "○");
+      if (i < 3) telnetLog(",");
+    }
+    telnetLog("] (Plazas " + String(spotMapping[0]) + "," + String(spotMapping[1]) + "," + 
+                  String(spotMapping[2]) + "," + String(spotMapping[3]) + ")");
+  }
+
+  void RFID() {
+    if (millis() - ultRFIDCheck < TIEMPO_CHECK_RFID) return;
+    ultRFIDCheck = millis();
+
+    if (!mfrc522.PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial()) return;
+
+    if (esUIDValido(mfrc522.uid.uidByte)) {
+      telnetLog("✅ RFID Tag válido, enviando orden... (ESP8266)");
+      Serial.println("ABRIR");
+      delay(1000);
+    }
+
+    mfrc522.PICC_HaltA();
+    mfrc522.PCD_StopCrypto1();
+  }
+
+  void confirmarLlegada(String reservationId) {
+    WiFiClientSecure client;
+    client.setInsecure();
+    HTTPClient http;
+    String url = String("https://") + API_HOST_DOMAIN + ENDPOINT_CONFIRM_ARRIVAL + "/" + reservationId;
+    
+    StaticJsonDocument<128> doc;
+    doc["reservationId"] = reservationId;
+    String payload;
+    serializeJson(doc, payload);
+      
+    http.setTimeout(60000);
+    http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+    http.useHTTP10(true);
+    http.setReuse(false);
+
+    if (!http.begin(client, url)) {
+      telnetLog("❌ begin() fallo en confirmarLlegada");
+      return;
+    }
+
+    http.addHeader("Content-Type", "application/json");
+    http.addHeader("Accept", "application/json");
+    http.setUserAgent("ParkElite-ESP8266/1.0");
+  
+    int statusCode = http.POST(payload);
+    http.end();
+    
+    telnetLog("🚗 Confirmación de llegada - Status: " + String(statusCode));
+  }
+
+  void completarLlegada(String reservationId) {
+    WiFiClientSecure client;
+    client.setInsecure();
+    HTTPClient http;
+    String url = String("https://") + API_HOST_DOMAIN + ENDPOINT_COMPLETE_ARRIVAL + "/" + reservationId;
+    
+    StaticJsonDocument<128> doc;
+    doc["reservationId"] = reservationId;
+    String payload;
+    serializeJson(doc, payload);
+      
+    http.setTimeout(60000);
+    http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+    http.useHTTP10(true);
+    http.setReuse(false);
+
+    if (!http.begin(client, url)) {
+      telnetLog("❌ begin() fallo en completarLlegada");
+      return;
+    }
+
+    http.addHeader("Content-Type", "application/json");
+    http.addHeader("Accept", "application/json");
+    http.setUserAgent("ParkElite-ESP8266/1.0");
+  
+    int statusCode = http.POST(payload);
+    http.end();
+    
+    telnetLog("🚗 Completación de la reserva - Status: " + String(statusCode));
+  }
+
+  bool cancelarReserva(String reservationId) {
+    WiFiClientSecure client;
+    client.setInsecure();
+    HTTPClient http;
+    String url = String("https://") + API_HOST_DOMAIN + ENDPOINT_CANCEL_SPECIFIC_RESERVATION + "/" + reservationId;
+    
+    http.setTimeout(60000);
+    http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+    http.useHTTP10(true);
+    http.setReuse(false);
+
+    if (!http.begin(client, url)) {
+      telnetLog("❌ begin() fallo en cancelarReserva");
+      return false;
+    }
+
+    http.addHeader("Content-Type", "application/json");
+    http.addHeader("Accept", "application/json");
+    http.setUserAgent("ParkElite-ESP8266/1.0");
+
+    int statusCode = http.DELETE();
+    http.end();
+    
+    telnetLog("Cancelación de reserva - Status: " + String(statusCode));
+    return (statusCode == 200 || statusCode == 204);
+  }
+
+  void checkReservasExpiradasCanceladas() {
+    telnetLog("🔄 Sincronizando reservas para expirar... (ESP8266)");
+    unsigned long currentTime = millis();
+
+    for (int i = 0; i < 4; i++) {
+      if (activeReservations[i].reservationId.length() > 0 &&
+          !activeReservations[i].confirmed &&
+          (currentTime - activeReservations[i].startTime) > 1200000) { // 20 minutos
+
+        telnetLog("⏰ Cancelando reserva expirada: " + activeReservations[i].reservationIdc + " (ESP8266)");
+
+        if (cancelarReserva(activeReservations[i].reservationId)) {
           activeReservations[i].reservationId = "";
           activeReservations[i].spotNumber = -1;
           activeReservations[i].startTime = 0;
           activeReservations[i].confirmed = false;
           activeReservations[i].userCode = "";
-          break;
-        }
-      }
-    }
-  }
-  else if (message.startsWith("SENSOR_DETECTING:")) {
-    int spotNumber = message.substring(17).toInt();
-    telnetLog("👁️ Detectando vehículo en plaza " + String(spotNumber));
-  }
-  else if (message.startsWith("ESTADO_OCUPACION:")) {
-    String data = message.substring(17);
-    int colonPos = data.indexOf(':');
-    
-    if (colonPos > 0) {
-      String estados = data.substring(0, colonPos);
-      String plazas = data.substring(colonPos + 1);
-      
-      // Actualizar estados
-      for (int i = 0; i < 4 && i * 2 < estados.length(); i++) {
-        char estado = estados.charAt(i * 2);
-        spotOccupied[i] = (estado == '1');
-      }
-      
-      telnetLog("📊 Estado ocupación actualizado: " + estados + " (Plazas: " + plazas + ")");
-    }
-  }
-  else if (message.startsWith("SYSTEM_STATUS:")) {
-    telnetLog("🔧 Estado del sistema Arduino recibido");
-  }
-  else if (message == "SENSORS_RESET_OK") {
-    telnetLog("✅ Sensores Arduino reseteados");
-  }
-  else {
-    telnetLog("🤔 Mensaje desconocido de Arduino: " + message);
-  }
-}
-
-int getSpotIndex(int spotNumber) {
-  for (int i = 0; i < 4; i++) {
-    if (spotMapping[i] == spotNumber) {
-      return i;
-    }
-  }
-  return -1; // No encontrado
-}
-
-void obtenerReservasActivas() {
-  telnetLog("🔄 Sincronizando reservas activas... (ESP8266)");
-  
-  if (WiFi.status() != WL_CONNECTED) {
-    telnetLog("❌ WiFi desconectado, reintentando... (ESP8266)");
-    if (!wifiConnect()) {
-      telnetLog("❌ No se pudo reconectar WiFi (ESP8266)");
-      return;
-    }
-  }
-  
-  WiFiClient client;
-  HTTPClient http;
-  String url = String("http://") + API_HOST_DOMAIN + ENDPOINT_GET_ACTIVE_RESERVATIONS;
-  
-  http.begin(client, url);
-  http.addHeader("Content-Type", "application/json");
-  http.setTimeout(15000);
-  
-  int statusCode = http.GET();
-  String response = (statusCode > 0) ? http.getString() : "";
-  http.end();
-  
-  if (statusCode != 200) {
-    telnetLog("❌ Error en sincronización - Status: " + String(statusCode) + " (ESP8266)");
-    return;
-  }
-  
-  StaticJsonDocument<2048> doc;
-  DeserializationError error = deserializeJson(doc, response);
-  
-  if (error) {
-    telnetLog("❌ Error al parsear JSON de reservas: " + String(error.c_str()) + " (ESP8266)");
-    return;
-  }
-  
-  if (!doc["success"].as<bool>()) {
-    telnetLog("❌ Respuesta del servidor indica error (ESP8266)");
-    return;
-  }
-  
-  // limpiar reservas actuales
-  for (int i = 0; i < 4; i++) {
-    activeReservations[i].reservationId = "";
-    activeReservations[i].spotNumber = -1;
-    activeReservations[i].startTime = 0;
-    activeReservations[i].confirmed = false;
-    activeReservations[i].userCode = "";
-  }
-  
-  JsonArray reservations = doc["reservations"].as<JsonArray>();
-  int index = 0;
-  
-  for (JsonObject reservation : reservations) {
-    if (index >= 4) break;
-    
-    String reservationId = reservation["_id"].as<String>();
-    String status = reservation["status"].as<String>();
-    String userCode = String(reservation["code"].as<int>());
-    
-    JsonObject parkingSpot = reservation["parkingSpotId"];
-    int spotNumber = parkingSpot["spotNumber"].as<int>();
-    
-    if (reservationId.length() > 0 && spotNumber > 0) {
-      activeReservations[index].reservationId = reservationId;
-      activeReservations[index].spotNumber = spotNumber;
-      activeReservations[index].startTime = millis();
-      activeReservations[index].confirmed = (status == "confirmado");
-      activeReservations[index].userCode = userCode;
-      
-      telnetLog("✅ Reserva cargada - ID: " + reservationId + 
-                    " | Plaza: " + String(spotNumber) + 
-                    " | Código: " + userCode + 
-                    " | Estado: " + status);
-      index++;
-    }
-  }
-  
-  telnetLog("🔄 Sincronización completada. Reservas cargadas: " + String(index) + " (ESP8266)");
-  mostrarEstadosReservas();
-}
-
-void webCodigo() {
-  if (!server.hasArg("code")) {
-    server.send(200, "text/html", generateResultHTML("Error", "Falta código", true));
-    return;
-  }
-  
-  String code = server.arg("code");
-
-  StaticJsonDocument<128> j;
-  j["code"] = code;
-  String payload;
-  serializeJson(j, payload);
-
-  WiFiClient client;
-  HTTPClient http;
-  String url = String("http://") + API_HOST_DOMAIN + ENDPOINT_CHECKCODE;
-  http.begin(client, url);
-  http.addHeader("Content-Type", "application/json");
-  int statusCode = http.POST(payload);
-  String resp = (statusCode > 0) ? http.getString() : "";
-  http.end();
-
-  if (statusCode <= 0) {
-    server.send(200, "text/html", generateResultHTML("Error", "No se pudo conectar con el servidor", true));
-    return;
-  }
-
-  StaticJsonDocument<256> res;
-  DeserializationError err = deserializeJson(res, resp);
-  if (err) {
-    server.send(200, "text/html", generateResultHTML("Error", "Error interno del servidor", true));
-    return;
-  }
-
-  bool allowed = res["allowed"];
-  int spotNumber = res.containsKey("spotId") ? res["spotId"].as<int>() : -1;
-  bool matched = false;
-
-  if (allowed) {
-    Serial.println("ABRIR");
-    
-    // busca reserva activa por código
-    for (int i = 0; i < 4; i++) {
-      if (activeReservations[i].userCode == code) {
-        matched = true;
-        if (activeReservations[i].confirmed) {
-          activeReservations[i].startTime = millis();
-          confirmarLlegada(activeReservations[i].reservationId);
         } else {
-          telnetLog("ℹ️ La reserva no esta confirmada: " + activeReservations[i].reservationId + " (ESP8266)");
+          telnetLog("⚠️ No se pudo cancelar en el servidor; NO se limpia local para reintentar luego. (ESP8266)");
         }
+      }
+    }
+  }
+
+
+  // --- MENSAJES ---
+
+  void procesarComandosArduino(String message) {
+    /*
+    ESP8266 → ARDUINO:
+    PING	Comando de verificación de conexión. Arduino responde con PONG si está activo.
+    ABRIR	Orden para abrir la barrera. Arduino abre el servo 5 segundos y luego lo cierra automáticamente.
+    CONSULTAR_OCUPACION	Solicita el estado de ocupación de las plazas. Arduino responde con ESTADO_OCUPACION:....
+    STATUS_REQUEST	Solicita el estado completo del sistema (sensores y barrera). Arduino responde con SYSTEM_STATUS:....
+    RESET_SENSORS	Orden para reiniciar/resetear todos los sensores de ocupación. Arduino responde con SENSORS_RESET_OK.
+
+    ARDUINO → ESP8266:
+    PONG	Respuesta al PING enviado por ESP, confirma que Arduino está conectado.
+    BARRERA_ABIERTA	Confirma que la barrera fue abierta (respuesta al comando ABRIR).
+    SENSOR_DETECTING:<n>	Notifica que un sensor detectó un vehículo en la plaza <n>. Estado inicial antes de confirmar ocupación.
+    OCUPACION_CONFIRMADA:<n>	Confirma que la plaza <n> está ocupada después del tiempo de confirmación (60s).
+    LIBERADO:<n>	Notifica que la plaza <n> se liberó.
+    ESTADO_OCUPACION:<estados>:<plazas>	Envía el estado de ocupación de todas las plazas (1 = ocupada, 0 = libre). Incluye correspondencia de IDs de plaza.
+    SYSTEM_STATUS:SENSORS_OK:<estados>:BARRIER_OK:1	Estado completo de sensores y barrera. Indica si sensores están funcionando y si barrera está operativa.
+    SENSORS_RESET_OK	Confirma que los sensores fueron reseteados tras el comando RESET_SENSORS.
+    */
+
+    const char* comandos_esp[] = {"PING", "ABRIR", "CONSULTAR_OCUPACION", "STATUS_REQUEST", "RESRT_SENSORS"};
+    bool coincide = false;
+
+    for (int i = 0; i < 5; i++) {
+      if (strcmp(message.c_str(), comandos_esp[i]) == 0) {
+        coincide = true;
         break;
       }
     }
 
-    if (!matched) {
-      telnetLog("❌ Código válido, pero no aparece en activeReservations: " + code);
+    if (coincide) return;
+
+    if (message == "PONG") {
+      arduinoConectado = true;
+      ultPing = millis();
+      //procesarComandosArduino("STATUS_REQUEST");
+    }
+    else if (message == "BARRERA_ABIERTA") {
+      telnetLog("✅ Barrera abierta confirmada");
+    }
+    else if (message.startsWith("OCUPACION_CONFIRMADA:")) {
+      int spotNumber = message.substring(21).toInt();
+      int spotIndex = getSpotIndex(spotNumber);
+      if (spotIndex >= 0) {
+        spotOccupied[spotIndex] = true;
+        telnetLog("🚗 Plaza " + String(spotNumber) + " ocupada confirmada");
+      }
+    }
+    else if (message.startsWith("LIBERADO:")) {
+      int spotNumber = message.substring(9).toInt();
+      int spotIndex = getSpotIndex(spotNumber);
+      if (spotIndex >= 0) {
+        spotOccupied[spotIndex] = false;
+        telnetLog("🅿️ Plaza " + String(spotNumber) + " liberada");
+        
+        // Limpiar reserva confirmada
+        for (int i = 0; i < 4; i++) {
+          if (activeReservations[i].spotNumber == spotNumber && activeReservations[i].confirmed) {
+            telnetLog("Limpiando reserva completada: " + activeReservations[i].reservationId);
+            activeReservations[i].reservationId = "";
+            activeReservations[i].spotNumber = -1;
+            activeReservations[i].startTime = 0;
+            activeReservations[i].confirmed = false;
+            activeReservations[i].userCode = "";
+            completarLlegada(activeReservations[i].reservationId);
+            break;
+          }
+        }
+      }
+    }
+    else if (message.startsWith("SENSOR_DETECTING:")) {
+      int spotNumber = message.substring(17).toInt();
+      telnetLog("👁️ Detectando vehículo en plaza " + String(spotNumber));
+    }
+    else if (message.startsWith("ESTADO_OCUPACION:")) {
+      String data = message.substring(17);
+      int colonPos = data.indexOf(':');
+      
+      if (colonPos > 0) {
+        String estados = data.substring(0, colonPos);
+        String plazas = data.substring(colonPos + 1);
+        
+        // Actualizar estados
+        for (int i = 0; i < 4 && i * 2 < estados.length(); i++) {
+          char estado = estados.charAt(i * 2);
+          spotOccupied[i] = (estado == '1');
+        }
+        
+        telnetLog("📊 Estado ocupación actualizado: " + estados + " (Plazas: " + plazas + ")");
+      }
+    }
+    else if (message.startsWith("SYSTEM_STATUS:")) {
+      telnetLog("🔧 Estado del sistema Arduino recibido");
+    }
+    else if (message == "SENSORS_RESET_OK") {
+      telnetLog("✅ Sensores Arduino reseteados");
+    }
+    else {
+      telnetLog("🤔 Mensaje desconocido de Arduino: " + message);
     }
   }
 
-  String msg = allowed ? "Acceso permitido" : "Código inválido o reserva no activa";
-  server.send(200, "text/html", generateResultHTML(allowed ? "Éxito" : "Acceso denegado", msg, !allowed));
-}
+  int getSpotIndex(int spotNumber) {
+    for (int i = 0; i < 4; i++) {
+      if (spotMapping[i] == spotNumber) {
+        return i;
+      }
+    }
+    return -1; // No encontrado
+  }
 
-// --- PÁGINA WEB ---
+  void obtenerReservasActivas() {
+    telnetLog("🔄 Sincronizando reservas activas... (ESP8266)");
+    
+    if (WiFi.status() != WL_CONNECTED) {
+      telnetLog("❌ WiFi desconectado, reintentando... (ESP8266)");
+      if (!wifiConnect()) {
+        telnetLog("❌ No se pudo reconectar WiFi (ESP8266)");
+        return;
+      }
+    }
+    
+    WiFiClientSecure client;
+    client.setInsecure();
+    HTTPClient http;
+    String url = String("https://") + API_HOST_DOMAIN + ENDPOINT_GET_ACTIVE_RESERVATIONS;
+    
+    http.setTimeout(15000);
+    http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
 
-void webPrincipal() {
-  String html = "<html><head>"
-    "<meta charset='UTF-8'>"
-    "<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
-    "<style>"
-    "* { margin: 0; padding: 0; box-sizing: border-box; }"
-    "body {"
-        "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;"
-        "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"
-        "min-height: 100vh;"
-        "display: flex;"
-        "align-items: center;"
-        "justify-content: center;"
-        "padding: 20px;"
-    "}"
-    ".container {"
-        "background: rgba(255, 255, 255, 0.95);"
-        "backdrop-filter: blur(10px);"
-        "border-radius: 20px;"
-        "padding: 50px 40px;"
-        "box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);"
-        "max-width: 450px;"
-        "width: 100%;"
-        "text-align: center;"
-        "border: 1px solid rgba(255, 255, 255, 0.2);"
-    "}"
-    ".lock-icon {"
-        "width: 80px;"
-        "height: 80px;"
-        "margin: 0 auto 30px;"
-        "border-radius: 50%;"
-        "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"
-        "display: flex;"
-        "align-items: center;"
-        "justify-content: center;"
-        "font-size: 40px;"
-        "color: white;"
-        "box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);"
-    "}"
-    "h1 {"
-        "font-size: 28px;"
-        "color: #2d3748;"
-        "margin-bottom: 10px;"
-        "font-weight: 600;"
-    "}"
-    ".subtitle {"
-        "color: #718096;"
-        "font-size: 16px;"
-        "margin-bottom: 40px;"
-        "line-height: 1.5;"
-    "}"
-    "form {"
-        "display: flex;"
-        "flex-direction: column;"
-        "gap: 25px;"
-    "}"
-    ".input-group {"
-        "position: relative;"
-        "text-align: left;"
-    "}"
-    "label {"
-        "display: block;"
-        "font-size: 14px;"
-        "font-weight: 600;"
-        "color: #4a5568;"
-        "margin-bottom: 8px;"
-    "}"
-    "input[type='text'] {"
-        "width: 100%;"
-        "padding: 16px 20px;"
-        "border: 2px solid #e2e8f0;"
-        "border-radius: 12px;"
-        "font-size: 18px;"
-        "font-weight: 600;"
-        "letter-spacing: 2px;"
-        "text-align: center;"
-        "background: rgba(255, 255, 255, 0.8);"
-        "transition: all 0.3s ease;"
-        "outline: none;"
-    "}"
-    "input[type='text']:focus {"
-        "border-color: #667eea;"
-        "background: white;"
-        "box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);"
-        "transform: translateY(-1px);"
-    "}"
-    "input[type='submit'] {"
-        "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"
-        "color: white;"
-        "border: none;"
-        "padding: 18px 30px;"
-        "border-radius: 12px;"
-        "font-size: 16px;"
-        "font-weight: 600;"
-        "cursor: pointer;"
-        "transition: all 0.3s ease;"
-        "box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);"
-        "text-transform: uppercase;"
-        "letter-spacing: 1px;"
-    "}"
-    "input[type='submit']:hover {"
-        "transform: translateY(-2px);"
-        "box-shadow: 0 8px 25px rgba(102, 126, 234, 0.6);"
-    "}"
-    "input[type='submit']:active {"
-        "transform: translateY(0);"
-    "}"
-    ".security-info {"
-        "margin-top: 30px;"
-        "padding: 20px;"
-        "background: rgba(102, 126, 234, 0.1);"
-        "border-radius: 12px;"
-        "border-left: 4px solid #667eea;"
-    "}"
-    ".security-info p {"
-        "color: #4a5568;"
-        "font-size: 14px;"
-        "line-height: 1.6;"
-        "margin: 0;"
-    "}"
-    ".code-hint {"
-        "font-size: 12px;"
-        "color: #718096;"
-        "margin-top: 5px;"
-        "font-style: italic;"
-    "}"
-    ".rfid-info {"
-        "margin-top: 20px;"
-        "padding: 15px;"
-        "background: rgba(76, 175, 80, 0.1);"
-        "border-radius: 12px;"
-        "border-left: 4px solid #4caf50;"
-    "}"
-    ".rfid-info p {"
-        "color: #2e7d32;"
-        "font-size: 13px;"
-        "line-height: 1.5;"
-        "margin: 0;"
-    "}"
-    ".status-indicator {"
-        "position: absolute;"
-        "top: 20px;"
-        "right: 20px;"
-        "width: 12px;"
-        "height: 12px;"
-        "border-radius: 50%;"
-        "background: " + String(arduinoConectado ? "#4caf50" : "#f44336") + ";"
-    "}"
-    "@media (max-width: 480px) {"
-        ".container { padding: 40px 25px; }"
-        "h1 { font-size: 24px; }"
-        ".subtitle { font-size: 14px; }"
-        ".lock-icon { width: 60px; height: 60px; font-size: 30px; }"
-        "input[type='text'] { font-size: 16px; padding: 14px 16px; }"
-        "input[type='submit'] { padding: 16px 25px; font-size: 14px; }"
-    "}"
-    "</style>"
-    "</head><body>"
-    "<div class='container'>"
-        "<div class='status-indicator'></div>"
-        "<div class='lock-icon'>🔐</div>"
-        "<h1>Control de Acceso</h1>"
-        "<p class='subtitle'>Ingrese su código de 6 dígitos para continuar</p>"
-        "<form action='/submit' method='POST'>"
-            "<div class='input-group'>"
-                "<label for='code'>Código de Acceso</label>"
-                "<input type='text' id='code' name='code' maxlength='6' pattern='[0-9]{6}' placeholder='000000' required>"
-                "<p class='code-hint'>Solo números, exactamente 6 dígitos</p>"
-            "</div>"
-            "<input type='submit' value='Verificar Código'>"
-        "</form>"
-        "<div class='security-info'>"
-            "<p><strong>🛡️ Acceso Seguro:</strong> Este sistema verifica su identidad mediante un código único de 6 dígitos.</p>"
-        "</div>"
-        "<div class='rfid-info'>"
-            "<p><strong>📡 Arduino:</strong> " + String(arduinoConectado ? "Conectado ✅" : "Desconectado ❌") + "</p>"
-        "</div>"
-    "</div>"
-    "</body></html>";
-  server.send(200, "text/html", html);
-}
+    if (!http.begin(client, url)) {
+      telnetLog("❌ begin() fallo en obtenerReservasActivas");
+      return;
+    }
+    
+    http.addHeader("Content-Type", "application/json");
+    http.addHeader("Accept", "application/json");
+    
+    int statusCode = http.GET();
+    String response = (statusCode > 0) ? http.getString() : "";
+    http.end();
+    
+    if (statusCode != 200) {
+      telnetLog("❌ Error en sincronización - Status: " + String(statusCode) + " (ESP8266)");
+      return;
+    }
+    
+    StaticJsonDocument<2048> doc;
+    DeserializationError error = deserializeJson(doc, response);
+    
+    if (error) {
+      telnetLog("❌ Error al parsear JSON de reservas: " + String(error.c_str()) + " (ESP8266)");
+      return;
+    }
+    
+    if (!doc["success"].as<bool>()) {
+      telnetLog("❌ Respuesta del servidor indica error (ESP8266)");
+      return;
+    }
+    
+    // limpiar reservas actuales
+    for (int i = 0; i < 4; i++) {
+      activeReservations[i].reservationId = "";
+      activeReservations[i].spotNumber = -1;
+      activeReservations[i].startTime = 0;
+      activeReservations[i].confirmed = false;
+      activeReservations[i].userCode = "";
+    }
+    
+    JsonArray reservations = doc["reservations"].as<JsonArray>();
+    int index = 0;
+    
+    for (JsonObject reservation : reservations) {
+      if (index >= 4) break;
+      
+      String reservationId = reservation["_id"].as<String>();
+      String status = reservation["status"].as<String>();
+      String userCode = String(reservation["code"].as<int>());
+      
+      JsonObject parkingSpot = reservation["parkingSpotId"];
+      int spotNumber = parkingSpot["spotNumber"].as<int>();
+      
+      if (reservationId.length() > 0 && spotNumber > 0) {
+        activeReservations[index].reservationId = reservationId;
+        activeReservations[index].spotNumber = spotNumber;
+        activeReservations[index].startTime = millis();
+        activeReservations[index].confirmed = (status == "confirmado");
+        activeReservations[index].userCode = userCode;
+        
+        telnetLog("✅ Reserva cargada - ID: " + reservationId + 
+                      " | Plaza: " + String(spotNumber) + 
+                      " | Código: " + userCode + 
+                      " | Estado: " + status);
+        index++;
+      }
+    }
+    
+    telnetLog("🔄 Sincronización completada. Reservas cargadas: " + String(index) + " (ESP8266)");
+    mostrarEstadosReservas();
+  }
 
-String generateResultHTML(const String& title, const String& message, bool isError) {
-  String html = "<html><head>"
-    "<meta charset='UTF-8'>"
-    "<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
-    "<style>"
-    "* { margin: 0; padding: 0; box-sizing: border-box; }"
-    "body {"
-        "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;"
-        "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"
-        "min-height: 100vh;"
-        "display: flex;"
-        "align-items: center;"
-        "justify-content: center;"
-        "padding: 20px;"
-    "}"
-    ".container {"
-        "background: rgba(255, 255, 255, 0.95);"
-        "backdrop-filter: blur(10px);"
-        "border-radius: 20px;"
-        "padding: 40px 30px;"
-        "box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);"
-        "max-width: 500px;"
-        "width: 100%;"
-        "text-align: center;"
-        "border: 1px solid rgba(255, 255, 255, 0.2);"
-    "}"
-    ".icon {"
-        "width: 80px;"
-        "height: 80px;"
-        "margin: 0 auto 20px;"
-        "border-radius: 50%;"
-        "display: flex;"
-        "align-items: center;"
-        "justify-content: center;"
-        "font-size: 40px;"
-        "font-weight: bold;"
-    "}"
-    ".icon-success {"
-        "background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);"
-        "color: white;"
-    "}"
-    ".icon-error {"
-        "background: linear-gradient(135deg, #ff6b6b 0%, #ffa500 100%);"
-        "color: white;"
-    "}"
-    "h3 {"
-        "font-size: 28px;"
-        "margin-bottom: 15px;"
-        "font-weight: 600;"
-    "}"
-    ".title-success { color: #2d5a87; }"
-    ".title-error { color: #c53030; }"
-    "p {"
-        "font-size: 16px;"
-        "line-height: 1.6;"
-        "margin-bottom: 30px;"
-        "color: #4a5568;"
-    "}"
-    ".btn {"
-        "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"
-        "color: white;"
-        "border: none;"
-        "padding: 15px 30px;"
-        "border-radius: 50px;"
-        "font-size: 16px;"
-        "font-weight: 600;"
-        "cursor: pointer;"
-        "transition: all 0.3s ease;"
-        "box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);"
-        "text-decoration: none;"
-        "display: inline-block;"
-    "}"
-    ".btn:hover {"
-        "transform: translateY(-2px);"
-        "box-shadow: 0 8px 25px rgba(102, 126, 234, 0.6);"
-    "}"
-    "@media (max-width: 480px) {"
-        ".container { padding: 30px 20px; }"
-        "h3 { font-size: 24px; }"
-        ".icon { width: 60px; height: 60px; font-size: 30px; }"
-    "}"
-    "</style>"
-    "</head><body>"
-    "<div class='container'>";
-  
-  html += "<div class='icon " + String(isError ? "icon-error'>✕" : "icon-success'>✓") + "</div>";
-  html += "<h3 class='" + String(isError ? "title-error" : "title-success") + "'>" + title + "</h3>";
-  html += "<p>" + message + "</p>";
-  html += "<button class='btn' onclick=\"window.location.href='/';\">Volver al formulario</button>";
-  html += "</div></body></html>";
-  
-  return html;
-}
+  void webCodigo() {
+    if (!server.hasArg("code")) {
+      server.send(200, "text/html", generateResultHTML("Error", "Falta código", true));
+      return;
+    }
+    
+    String code = server.arg("code");
+
+    StaticJsonDocument<128> j;
+    j["code"] = server.arg("code").toInt();
+    String payload;
+    serializeJson(j, payload);
+
+    WiFiClientSecure client;
+    client.setInsecure();
+    HTTPClient http;
+
+    String url = String("https://") + API_HOST_DOMAIN + ENDPOINT_CHECKCODE;
+
+    http.setTimeout(15000);
+    http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+
+    if (!http.begin(client, url)) {
+      telnetLog("❌ begin() fallo en webCodigo");
+      return;
+    }
+
+    http.addHeader("Content-Type", "application/json");
+    http.addHeader("Accept", "application/json");
+
+    int statusCode = http.POST(payload);
+    String resp = (statusCode > 0) ? http.getString() : "";
+    http.end();
+
+    telnetLog("🔐 POST checkCode -> " + String(statusCode) + " | URL: " + url + " | Payload: " + payload);
+
+    if (statusCode <= 0) {
+      server.send(200, "text/html", generateResultHTML("Error", "No se pudo conectar con el servidor", true));
+      return;
+    }
+
+    StaticJsonDocument<256> res;
+    DeserializationError err = deserializeJson(res, resp);
+    if (err) {
+      server.send(200, "text/html", generateResultHTML("Error", "Error interno del servidor", true));
+      return;
+    }
+
+    bool allowed = res["allowed"];
+    int spotNumber = res.containsKey("spotId") ? res["spotId"].as<int>() : -1;
+    bool matched = false;
+
+    if (allowed) {
+      Serial.println("ABRIR");
+      
+      // busca reserva activa por código
+      for (int i = 0; i < 4; i++) {
+        if (activeReservations[i].userCode == code) {
+          matched = true;
+          if (activeReservations[i].confirmed) {
+            activeReservations[i].startTime = millis();
+            confirmarLlegada(activeReservations[i].reservationId);
+          } else {
+            telnetLog("ℹ️ La reserva no esta confirmada: " + activeReservations[i].reservationId + " (ESP8266)");
+          }
+          break;
+        }
+      }
+
+      if (!matched) {
+        telnetLog("❌ Código válido, pero no aparece en activeReservations: " + code);
+      }
+    }
+
+    String msg = allowed ? "Acceso permitido" : "Código inválido o reserva no activa";
+    server.send(200, "text/html", generateResultHTML(allowed ? "Éxito" : "Acceso denegado", msg, !allowed));
+  }
+
+  // --- PÁGINA WEB ---
+
+  void webPrincipal() {
+    String html = "<html><head>"
+      "<meta charset='UTF-8'>"
+      "<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
+      "<style>"
+      "* { margin: 0; padding: 0; box-sizing: border-box; }"
+      "body {"
+          "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;"
+          "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"
+          "min-height: 100vh;"
+          "display: flex;"
+          "align-items: center;"
+          "justify-content: center;"
+          "padding: 20px;"
+      "}"
+      ".container {"
+          "background: rgba(255, 255, 255, 0.95);"
+          "backdrop-filter: blur(10px);"
+          "border-radius: 20px;"
+          "padding: 50px 40px;"
+          "box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);"
+          "max-width: 450px;"
+          "width: 100%;"
+          "text-align: center;"
+          "border: 1px solid rgba(255, 255, 255, 0.2);"
+      "}"
+      ".lock-icon {"
+          "width: 80px;"
+          "height: 80px;"
+          "margin: 0 auto 30px;"
+          "border-radius: 50%;"
+          "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"
+          "display: flex;"
+          "align-items: center;"
+          "justify-content: center;"
+          "font-size: 40px;"
+          "color: white;"
+          "box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);"
+      "}"
+      "h1 {"
+          "font-size: 28px;"
+          "color: #2d3748;"
+          "margin-bottom: 10px;"
+          "font-weight: 600;"
+      "}"
+      ".subtitle {"
+          "color: #718096;"
+          "font-size: 16px;"
+          "margin-bottom: 40px;"
+          "line-height: 1.5;"
+      "}"
+      "form {"
+          "display: flex;"
+          "flex-direction: column;"
+          "gap: 25px;"
+      "}"
+      ".input-group {"
+          "position: relative;"
+          "text-align: left;"
+      "}"
+      "label {"
+          "display: block;"
+          "font-size: 14px;"
+          "font-weight: 600;"
+          "color: #4a5568;"
+          "margin-bottom: 8px;"
+      "}"
+      "input[type='text'] {"
+          "width: 100%;"
+          "padding: 16px 20px;"
+          "border: 2px solid #e2e8f0;"
+          "border-radius: 12px;"
+          "font-size: 18px;"
+          "font-weight: 600;"
+          "letter-spacing: 2px;"
+          "text-align: center;"
+          "background: rgba(255, 255, 255, 0.8);"
+          "transition: all 0.3s ease;"
+          "outline: none;"
+      "}"
+      "input[type='text']:focus {"
+          "border-color: #667eea;"
+          "background: white;"
+          "box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);"
+          "transform: translateY(-1px);"
+      "}"
+      "input[type='submit'] {"
+          "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"
+          "color: white;"
+          "border: none;"
+          "padding: 18px 30px;"
+          "border-radius: 12px;"
+          "font-size: 16px;"
+          "font-weight: 600;"
+          "cursor: pointer;"
+          "transition: all 0.3s ease;"
+          "box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);"
+          "text-transform: uppercase;"
+          "letter-spacing: 1px;"
+      "}"
+      "input[type='submit']:hover {"
+          "transform: translateY(-2px);"
+          "box-shadow: 0 8px 25px rgba(102, 126, 234, 0.6);"
+      "}"
+      "input[type='submit']:active {"
+          "transform: translateY(0);"
+      "}"
+      ".security-info {"
+          "margin-top: 30px;"
+          "padding: 20px;"
+          "background: rgba(102, 126, 234, 0.1);"
+          "border-radius: 12px;"
+          "border-left: 4px solid #667eea;"
+      "}"
+      ".security-info p {"
+          "color: #4a5568;"
+          "font-size: 14px;"
+          "line-height: 1.6;"
+          "margin: 0;"
+      "}"
+      ".code-hint {"
+          "font-size: 12px;"
+          "color: #718096;"
+          "margin-top: 5px;"
+          "font-style: italic;"
+      "}"
+      ".rfid-info {"
+          "margin-top: 20px;"
+          "padding: 15px;"
+          "background: rgba(76, 175, 80, 0.1);"
+          "border-radius: 12px;"
+          "border-left: 4px solid #4caf50;"
+      "}"
+      ".rfid-info p {"
+          "color: #2e7d32;"
+          "font-size: 13px;"
+          "line-height: 1.5;"
+          "margin: 0;"
+      "}"
+      ".status-indicator {"
+          "position: absolute;"
+          "top: 20px;"
+          "right: 20px;"
+          "width: 12px;"
+          "height: 12px;"
+          "border-radius: 50%;"
+          "background: " + String(arduinoConectado ? "#4caf50" : "#f44336") + ";"
+      "}"
+      "@media (max-width: 480px) {"
+          ".container { padding: 40px 25px; }"
+          "h1 { font-size: 24px; }"
+          ".subtitle { font-size: 14px; }"
+          ".lock-icon { width: 60px; height: 60px; font-size: 30px; }"
+          "input[type='text'] { font-size: 16px; padding: 14px 16px; }"
+          "input[type='submit'] { padding: 16px 25px; font-size: 14px; }"
+      "}"
+      "</style>"
+      "</head><body>"
+      "<div class='container'>"
+          "<div class='status-indicator'></div>"
+          "<div class='lock-icon'>🔐</div>"
+          "<h1>Control de Acceso</h1>"
+          "<p class='subtitle'>Ingrese su código de 6 dígitos para continuar</p>"
+          "<form action='/submit' method='POST'>"
+              "<div class='input-group'>"
+                  "<label for='code'>Código de Acceso</label>"
+                  "<input type='text' id='code' name='code' maxlength='6' pattern='[0-9]{6}' placeholder='000000' required>"
+                  "<p class='code-hint'>Solo números, exactamente 6 dígitos</p>"
+              "</div>"
+              "<input type='submit' value='Verificar Código'>"
+          "</form>"
+          "<div class='security-info'>"
+              "<p><strong>🛡️ Acceso Seguro:</strong> Este sistema verifica su identidad mediante un código único de 6 dígitos.</p>"
+          "</div>"
+          "<div class='rfid-info'>"
+              "<p><strong>📡 Arduino:</strong> " + String(arduinoConectado ? "Conectado ✅" : "Desconectado ❌") + "</p>"
+          "</div>"
+      "</div>"
+      "</body></html>";
+    server.send(200, "text/html", html);
+  }
+
+  String generateResultHTML(const String& title, const String& message, bool isError) {
+    String html = "<html><head>"
+      "<meta charset='UTF-8'>"
+      "<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
+      "<style>"
+      "* { margin: 0; padding: 0; box-sizing: border-box; }"
+      "body {"
+          "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;"
+          "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"
+          "min-height: 100vh;"
+          "display: flex;"
+          "align-items: center;"
+          "justify-content: center;"
+          "padding: 20px;"
+      "}"
+      ".container {"
+          "background: rgba(255, 255, 255, 0.95);"
+          "backdrop-filter: blur(10px);"
+          "border-radius: 20px;"
+          "padding: 40px 30px;"
+          "box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);"
+          "max-width: 500px;"
+          "width: 100%;"
+          "text-align: center;"
+          "border: 1px solid rgba(255, 255, 255, 0.2);"
+      "}"
+      ".icon {"
+          "width: 80px;"
+          "height: 80px;"
+          "margin: 0 auto 20px;"
+          "border-radius: 50%;"
+          "display: flex;"
+          "align-items: center;"
+          "justify-content: center;"
+          "font-size: 40px;"
+          "font-weight: bold;"
+      "}"
+      ".icon-success {"
+          "background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);"
+          "color: white;"
+      "}"
+      ".icon-error {"
+          "background: linear-gradient(135deg, #ff6b6b 0%, #ffa500 100%);"
+          "color: white;"
+      "}"
+      "h3 {"
+          "font-size: 28px;"
+          "margin-bottom: 15px;"
+          "font-weight: 600;"
+      "}"
+      ".title-success { color: #2d5a87; }"
+      ".title-error { color: #c53030; }"
+      "p {"
+          "font-size: 16px;"
+          "line-height: 1.6;"
+          "margin-bottom: 30px;"
+          "color: #4a5568;"
+      "}"
+      ".btn {"
+          "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"
+          "color: white;"
+          "border: none;"
+          "padding: 15px 30px;"
+          "border-radius: 50px;"
+          "font-size: 16px;"
+          "font-weight: 600;"
+          "cursor: pointer;"
+          "transition: all 0.3s ease;"
+          "box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);"
+          "text-decoration: none;"
+          "display: inline-block;"
+      "}"
+      ".btn:hover {"
+          "transform: translateY(-2px);"
+          "box-shadow: 0 8px 25px rgba(102, 126, 234, 0.6);"
+      "}"
+      "@media (max-width: 480px) {"
+          ".container { padding: 30px 20px; }"
+          "h3 { font-size: 24px; }"
+          ".icon { width: 60px; height: 60px; font-size: 30px; }"
+      "}"
+      "</style>"
+      "</head><body>"
+      "<div class='container'>";
+    
+    html += "<div class='icon " + String(isError ? "icon-error'>✕" : "icon-success'>✓") + "</div>";
+    html += "<h3 class='" + String(isError ? "title-error" : "title-success") + "'>" + title + "</h3>";
+    html += "<p>" + message + "</p>";
+    html += "<button class='btn' onclick=\"window.location.href='/';\">Volver al formulario</button>";
+    html += "</div></body></html>";
+    
+    return html;
+  }
