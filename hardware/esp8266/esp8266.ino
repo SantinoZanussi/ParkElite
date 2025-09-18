@@ -43,7 +43,6 @@
   unsigned long ultExpiracionCheck = 0;
 
   const unsigned long TIEMPO_CHECK_RFID = 100; // 100 ms
-  const unsigned long TIEMPO_CHECK_OCUPACION = 5000; // 5 segundos
   const unsigned long TIEMPO_PING = 120000; // 2 minutos
   const unsigned long TIEMPO_OBTENER_RESERVAS = 600000; // 10 minutos
   const unsigned long TIEMPO_CHECK_EXPIRADAS = 180000; // 3 minutos
@@ -77,7 +76,7 @@
   String generateResultHTML(const String& title, const String& message, bool isError = false);
   void completarLlegada(String reservationId);
   void confirmarLlegada(String reservationId);
-  bool cancelarReserva(String reservationId);
+  bool cancelarPorNoLlegada(String reservationId);
   void procesarComandosArduino(String message);
   void obtenerReservasActivas();
   void mostrarEstadosReservas();
@@ -173,7 +172,7 @@
         ultReservasCheck = millis();
       }
 
-      if (millis() - ultExpiracionCheck > TIEMPO_CHECK_OCUPACION) {
+      if (millis() - ultExpiracionCheck > TIEMPO_CHECK_EXPIRADAS) {
         checkReservasExpiradasCanceladas();
         ultExpiracionCheck = millis();
       }
@@ -445,34 +444,63 @@
   }
 
   void confirmarLlegada(String reservationId) {
+    reservationId.trim();
+    if (reservationId.length() == 0) { telnetLog("❌ confirm-arrival: reservationId vacío"); return; }
+    if (WiFi.status() != WL_CONNECTED) { telnetLog("❌ WiFi down"); return; }
+
+    telnetLog("📶 RSSI=" + String(WiFi.RSSI()) + " dBm");
+    IPAddress ip;
+    if (WiFi.hostByName(API_HOST_DOMAIN, ip)) {
+      telnetLog("🧭 DNS " + String(API_HOST_DOMAIN) + " -> " + ip.toString());
+    } else {
+      telnetLog("⚠️ DNS fallo para " + String(API_HOST_DOMAIN));
+    }
+
     WiFiClientSecure client;
     client.setInsecure();
     HTTPClient http;
     String url = String("https://") + API_HOST_DOMAIN + ENDPOINT_CONFIRM_ARRIVAL + "/" + reservationId;
-    
-    StaticJsonDocument<128> doc;
-    doc["reservationId"] = reservationId;
-    String payload;
-    serializeJson(doc, payload);
-      
-    http.setTimeout(60000);
-    http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
-    http.useHTTP10(true);
-    http.setReuse(false);
 
-    if (!http.begin(client, url)) {
-      telnetLog("❌ begin() fallo en confirmarLlegada");
-      return;
+    const int MAX_TRIES = 3;
+    int code = -1000;
+    String resp;
+
+    for (int attempt = 1; attempt <= MAX_TRIES; attempt++) {
+      bool ok = http.begin(client, url);
+      if (!ok) {
+        telnetLog("❌ begin() fallo en confirm-arrival (try " + String(attempt) + ")");
+        delay(200 * attempt);
+        continue;
+      }
+
+      http.setTimeout(15000);
+      http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+      http.setReuse(false);
+      http.addHeader("Accept", "application/json");
+      http.addHeader("Content-Type", "application/json");
+      http.setUserAgent("ParkElite-ESP8266/1.0");
+
+      code = http.POST("");
+      resp = (code > 0) ? http.getString() : "";
+      http.end();
+
+      telnetLog("🚗 confirm-arrival -> " + String(code) + " (" + String(attempt) + "/" + String(MAX_TRIES) + ")"
+                + " | id=" + reservationId + " | body=" + resp);
+
+      if (code > 0) break;
+      delay(300 * attempt);
+      yield();
     }
 
-    http.addHeader("Content-Type", "application/json");
-    http.addHeader("Accept", "application/json");
-    http.setUserAgent("ParkElite-ESP8266/1.0");
-  
-    int statusCode = http.POST(payload);
-    http.end();
-    
-    telnetLog("🚗 Confirmación de llegada - Status: " + String(statusCode));
+    if (code >= 200 && code < 300) {
+      for (int i = 0; i < 4; i++) {
+        if (activeReservations[i].reservationId == reservationId) {
+          activeReservations[i].confirmed = false;
+        }
+      }
+    } else if (code == -1) {
+      telnetLog("⚠️ TLS/Conexión falló. Suele ser DNS/SNI, WiFi débil o cold-start del server.");
+    }
   }
 
   void completarLlegada(String reservationId) {
@@ -488,7 +516,6 @@
       
     http.setTimeout(60000);
     http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
-    http.useHTTP10(true);
     http.setReuse(false);
 
     if (!http.begin(client, url)) {
@@ -506,57 +533,42 @@
     telnetLog("🚗 Completación de la reserva - Status: " + String(statusCode));
   }
 
-  bool cancelarReserva(String reservationId) {
-    WiFiClientSecure client;
-    client.setInsecure();
-    HTTPClient http;
-    String url = String("https://") + API_HOST_DOMAIN + ENDPOINT_CANCEL_SPECIFIC_RESERVATION + "/" + reservationId;
-    
-    http.setTimeout(60000);
-    http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
-    http.useHTTP10(true);
-    http.setReuse(false);
+bool cancelarPorNoLlegada(String reservationId) {
+  WiFiClientSecure client; client.setInsecure();
+  HTTPClient http;
 
-    if (!http.begin(client, url)) {
-      telnetLog("❌ begin() fallo en cancelarReserva");
-      return false;
-    }
+  bool ok = http.begin(client, API_HOST_DOMAIN, 443, String(ENDPOINT_CANCEL_RESERVATION) + String("?reservationId=") + reservationId, true);
+  if (!ok) { telnetLog("❌ begin() fallo en cancelarPorNoLlegada"); return false; }
 
-    http.addHeader("Content-Type", "application/json");
-    http.addHeader("Accept", "application/json");
-    http.setUserAgent("ParkElite-ESP8266/1.0");
+  http.setTimeout(15000);
+  http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+  http.setReuse(false);
+  http.addHeader("Accept", "application/json");
+  http.addHeader("Content-Type", "application/json");
 
-    int statusCode = http.DELETE();
-    http.end();
-    
-    telnetLog("Cancelación de reserva - Status: " + String(statusCode));
-    return (statusCode == 200 || statusCode == 204);
-  }
+  int code = http.POST("");
+  String resp = (code>0)? http.getString() : "";
+  telnetLog("🛑 cancel-arrival -> " + String(code) + " - " + http.errorToString(code) +
+            " | id=" + reservationId + " | body=" + resp);
+  http.end();
 
-  void checkReservasExpiradasCanceladas() {
-    telnetLog("🔄 Sincronizando reservas para expirar... (ESP8266)");
-    unsigned long currentTime = millis();
+  return (code >= 200 && code < 300);
+}
 
-    for (int i = 0; i < 4; i++) {
-      if (activeReservations[i].reservationId.length() > 0 &&
-          !activeReservations[i].confirmed &&
-          (currentTime - activeReservations[i].startTime) > 1200000) { // 20 minutos
-
-        telnetLog("⏰ Cancelando reserva expirada: " + activeReservations[i].reservationIdc + " (ESP8266)");
-
-        if (cancelarReserva(activeReservations[i].reservationId)) {
-          activeReservations[i].reservationId = "";
-          activeReservations[i].spotNumber = -1;
-          activeReservations[i].startTime = 0;
-          activeReservations[i].confirmed = false;
-          activeReservations[i].userCode = "";
-        } else {
-          telnetLog("⚠️ No se pudo cancelar en el servidor; NO se limpia local para reintentar luego. (ESP8266)");
-        }
+void checkReservasExpiradasCanceladas() {
+  telnetLog("🔄 Chequeando vencidas por no llegada (server decide)...");
+  for (int i = 0; i < 4; i++) {
+    if (activeReservations[i].reservationId.length() == 0) continue;
+    if (activeReservations[i].confirmed) {
+      if (cancelarPorNoLlegada(activeReservations[i].reservationId)) {
+        telnetLog("⏰ Cancelada por no llegada: " + activeReservations[i].reservationId);
+        activeReservations[i] = {};
+      } else {
+        telnetLog("ℹ️ Aún sin cancelar (dentro de tiempo o error). Reintento luego.");
       }
     }
   }
-
+}
 
   // --- MENSAJES ---
 
@@ -617,14 +629,15 @@
         
         // Limpiar reserva confirmada
         for (int i = 0; i < 4; i++) {
-          if (activeReservations[i].spotNumber == spotNumber && activeReservations[i].confirmed) {
-            telnetLog("Limpiando reserva completada: " + activeReservations[i].reservationId);
+          if (activeReservations[i].spotNumber == spotNumber && !activeReservations[i].confirmed) {
+            String id_reserva_local = activeReservations[i].reservationId;
+            telnetLog("ℹ️ Limpiando reserva completada: " + activeReservations[i].reservationId);
             activeReservations[i].reservationId = "";
             activeReservations[i].spotNumber = -1;
             activeReservations[i].startTime = 0;
             activeReservations[i].confirmed = false;
             activeReservations[i].userCode = "";
-            completarLlegada(activeReservations[i].reservationId);
+            completarLlegada(id_reserva_local);
             break;
           }
         }
@@ -767,7 +780,8 @@
       return;
     }
     
-    String code = server.arg("code");
+    int codeInt = server.arg("code").toInt();
+    String codeNorm = String(codeInt);
 
     StaticJsonDocument<128> j;
     j["code"] = server.arg("code").toInt();
@@ -811,6 +825,7 @@
 
     bool allowed = res["allowed"];
     int spotNumber = res.containsKey("spotId") ? res["spotId"].as<int>() : -1;
+    String serverReservationId = res.containsKey("reservationId") ? String((const char*)res["reservationId"]) : "";
     bool matched = false;
 
     if (allowed) {
@@ -818,7 +833,7 @@
       
       // busca reserva activa por código
       for (int i = 0; i < 4; i++) {
-        if (activeReservations[i].userCode == code) {
+        if (activeReservations[i].reservationId == serverReservationId) {
           matched = true;
           if (activeReservations[i].confirmed) {
             activeReservations[i].startTime = millis();
@@ -831,7 +846,7 @@
       }
 
       if (!matched) {
-        telnetLog("❌ Código válido, pero no aparece en activeReservations: " + code);
+        telnetLog("❌ Código válido, pero no aparece en activeReservations: " + codeNorm);
       }
     }
 

@@ -275,65 +275,143 @@ exports.getOccupancyStats = async (req, res) => {
 };
 
 exports.confirm_arrival = async (req, res) => {
-  const reservationId = req.params.reservationId;
-  const reservation = await Reservation.findOne({
-    _id: reservationId,
-    status: { $nin: ['cancelado', 'completado'] }
-  });
-  if (!reservation) return res.status(404).json({ message: 'Reserva no encontrada', allowed: false });
-  if (reservation.status === 'confirmado') {
-    reservation.status = 'pendiente';
-    await reservation.save();
-    return res.json({ message: 'La reserva ya fue confirmada', allowed: true, reservation });
+  try {
+    const { reservationId } = req.params;
+    const reservation = await Reservation.findOne({
+      _id: reservationId,
+      status: { $nin: ['cancelado', 'completado', 'pendiente'] }
+    });
+    if (!reservation) {
+      return res.status(404).json({ message: 'Reserva no encontrada', allowed: false });
+    }
+    if (reservation.status === 'confirmado') {
+      reservation.status = 'pendiente';
+      await reservation.save();
+      return res.json({ message: 'Llegada confirmada, reserva en estado pendiente', allowed: true, reservation });
+    }
+    return res.status(409).json({ message: `Estado inesperado: ${reservation.status}`, allowed: false });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Error del servidor', allowed: false });
   }
-}
+};
 
 exports.complete_arrival = async (req, res) => {
-  const reservationId = req.params.reservationId;
-  const reservation = await Reservation.findOne({
-    _id: reservationId,
-    status: { $nin: ['cancelado', 'completado', 'confirmado'] }
-  });
-  if (!reservation) return res.status(404).json({ message: 'Reserva no encontrada', allowed: false });
-  if (reservation.status === 'pendiente') {
-    reservation.status = 'completado';
-    await reservation.save();
-    return res.json({ message: 'La reserva ya fue confirmada', allowed: true, reservation });
+  try {
+    const { reservationId } = req.params;
+    const reservation = await Reservation.findOne({
+      _id: reservationId,
+      status: { $nin: ['cancelado', 'completado', 'confirmado'] }
+    });
+    if (!reservation) {
+      return res.status(404).json({ message: 'Reserva no encontrada', allowed: false });
+    }
+    if (reservation.status === 'pendiente') {
+      reservation.status = 'completado';
+      await reservation.save();
+      return res.json({ message: 'Reserva completada', allowed: true, reservation });
+    }
+    return res.status(409).json({ message: `Estado inesperado: ${reservation.status}`, allowed: false });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Error del servidor', allowed: false });
   }
-}
+};
 
 exports.cancel_expired = async (req, res) => {
-  console.log('cancel_expired');
-  console.log(req.body);
-  const reservationId = req.body.reservationId;
-  const reservation = await Reservation.findOne({
-    _id: reservationId,
-    status: { $nin: ['cancelado', 'completado'] }
-  });
-  if (!reservation) return res.status(404).json({ message: 'Reserva no encontrada', allowed: false });
-  if (reservation.status === 'confirmado') {
+  try {
+    const reservationId = req.query.reservationId || req.body.reservationId;
+
+    if (!reservationId) {
+      return res.status(400).json({ message: 'Falta reservationId', allowed: false });
+    }
+    if (!mongoose.Types.ObjectId.isValid(reservationId)) {
+      return res.status(400).json({ message: 'reservationId inválido', allowed: false });
+    }
+
+    const reservation = await Reservation.findById(reservationId);
+    if (!reservation) {
+      return res.status(404).json({ message: 'Reserva no encontrada', allowed: false });
+    }
+    
+    if (reservation.status !== 'confirmado') {
+      return res.status(409).json({
+        message: 'La reserva no está en estado confirmado (o ya fue procesada)',
+        allowed: false,
+        status: reservation.status
+      });
+    }
+
+    // Punto de referencia para el conteo de 20 min:
+    // 1) startTime (ms/ISO) si lo guardan al crear la reserva
+    // 2) startDate si existe
+    // 3) createdAt (timestamps de Mongoose)
+    const startAt =
+      reservation.startTime
+        ? new Date(reservation.startTime)
+        : reservation.startDate
+          ? new Date(reservation.startDate)
+          : reservation.createdAt
+            ? new Date(reservation.createdAt)
+            : null;
+
+    if (!startAt || isNaN(startAt.getTime())) {
+      return res.status(422).json({
+        message: 'No hay marca de tiempo para evaluar vencimiento (startTime/startDate/createdAt).',
+        allowed: false
+      });
+    }
+
+    const now = new Date();
+    const minutesDiff = (now.getTime() - startAt.getTime()) / 60000;
+
+    if (minutesDiff < 20) {
+      const restante = Math.ceil(20 - minutesDiff);
+      return res.status(200).json({
+        message: `Aún no pasaron 20 minutos desde el inicio. Restan ~${restante} min.`,
+        allowed: false
+      });
+    }
+
     reservation.status = 'cancelado';
     await reservation.save();
-    return res.json({ message: 'La reserva ha sido cancelada', allowed: true, reservation });
+
+    return res.json({
+      message: 'La reserva ha sido cancelada por no llegada',
+      allowed: true,
+      reservation
+    });
+  } catch (err) {
+    console.error('cancel_expired error:', err);
+    return res.status(500).json({ message: 'Error interno', allowed: false });
   }
-}
+};
 
 exports.checkCodeUser = async (req, res) => {
-  const user_code = req.body.code; 
-
   try {
-    const checkCode = await Reservation.findOne({ code: user_code });
+    const user_code = Number(req.body.code);
+    const now = new Date();
+    const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0,0,0));
+    const endOfDay   = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23,59,59,999));
 
-    if (!checkCode) {
-      return res.status(404).json({ allowed: false, message: 'Reserva no encontrada' });
-    } else {
-      return res.json({ allowed: true, spotId: checkCode.parkingSpotId });
-    }
+    const checkCode = await Reservation.findOne({
+      code: user_code,
+      reservationDate: { $gte: startOfDay, $lt: endOfDay },
+      status: { $nin: ['cancelado', 'completado'] }
+    }).populate('parkingSpotId');
+
+    if (!checkCode) return res.status(404).json({ allowed: false, message: 'Reserva no válida/activa' });
+
+    return res.json({
+      allowed: true,
+      spotId: checkCode.parkingSpotId?.spotNumber ?? null,
+      reservationId: checkCode._id
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Error del servidor' });
   }
-}
+};
 
 exports.getActiveReservations = async (req, res) => {
   try {
