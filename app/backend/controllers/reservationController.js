@@ -405,7 +405,7 @@ exports.checkCodeUser = async (req, res) => {
     return res.json({
       allowed: true,
       spotId: checkCode.parkingSpotId?.spotNumber ?? null,
-      reservationId: checkCode._id
+      reservationId: checkCode._id.toString(),
     });
   } catch (err) {
     console.error(err);

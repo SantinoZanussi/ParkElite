@@ -476,17 +476,20 @@
       http.setTimeout(15000);
       http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
       http.setReuse(false);
+      http.useHTTP10(true);
       http.addHeader("Accept", "application/json");
       http.addHeader("Content-Type", "application/json");
+      http.addHeader("Connection", "close");
       http.setUserAgent("ParkElite-ESP8266/1.0");
 
-      code = http.POST("");
+      code = http.POST("{}");
       resp = (code > 0) ? http.getString() : "";
-      http.end();
 
       telnetLog("🚗 confirm-arrival -> " + String(code) + " (" + String(attempt) + "/" + String(MAX_TRIES) + ")"
                 + " | id=" + reservationId + " | body=" + resp);
-
+      http.end();
+      client.stop();
+      
       if (code > 0) break;
       delay(300 * attempt);
       yield();
