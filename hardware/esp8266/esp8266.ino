@@ -456,43 +456,42 @@
       telnetLog("⚠️ DNS fallo para " + String(API_HOST_DOMAIN));
     }
 
-    WiFiClientSecure client;
-    client.setInsecure();
-    HTTPClient http;
     String url = String("https://") + API_HOST_DOMAIN + ENDPOINT_CONFIRM_ARRIVAL + "/" + reservationId;
 
-    const int MAX_TRIES = 3;
+    const int MAX_TRIES = 4;
     int code = -1000;
     String resp;
 
     for (int attempt = 1; attempt <= MAX_TRIES; attempt++) {
-      bool ok = http.begin(client, url);
-      if (!ok) {
+      telnetLog("💾 freeHeap(before)= " + String(ESP.getFreeHeap()));
+      WiFiClientSecure client; 
+      client.setInsecure();
+      client.setTimeout(15000);
+
+      HTTPClient http;
+      if (!http.begin(client, url)) {
         telnetLog("❌ begin() fallo en confirm-arrival (try " + String(attempt) + ")");
-        delay(200 * attempt);
+        delay(250 * attempt);
         continue;
       }
 
-      http.setTimeout(15000);
       http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
       http.setReuse(false);
-      http.useHTTP10(true);
       http.addHeader("Accept", "application/json");
       http.addHeader("Content-Type", "application/json");
-      http.addHeader("Connection", "close");
       http.setUserAgent("ParkElite-ESP8266/1.0");
 
       code = http.POST("{}");
       resp = (code > 0) ? http.getString() : "";
-
       telnetLog("🚗 confirm-arrival -> " + String(code) + " (" + String(attempt) + "/" + String(MAX_TRIES) + ")"
                 + " | id=" + reservationId + " | body=" + resp);
+
       http.end();
-      client.stop();
-      
+      yield();
+      telnetLog("💾 freeHeap(after)= " + String(ESP.getFreeHeap()));
+
       if (code > 0) break;
       delay(300 * attempt);
-      yield();
     }
 
     if (code >= 200 && code < 300) {
@@ -502,7 +501,7 @@
         }
       }
     } else if (code == -1) {
-      telnetLog("⚠️ TLS/Conexión falló. Suele ser DNS/SNI, WiFi débil o cold-start del server.");
+      telnetLog("⚠️ TLS/Conexión falló. Revisa WiFi/SNI/server cold start.");
     }
   }
 
