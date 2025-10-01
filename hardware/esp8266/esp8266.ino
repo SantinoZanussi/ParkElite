@@ -9,8 +9,8 @@
   #include <MFRC522.h>
 
   // --- CONFIGURACIÓN ---
-  const char* WIFI_SSID         = "LAPTOP ANEXO 1";
-  const char* WIFI_PASSWORD     = "Anexo2043";
+  const char* WIFI_SSID         = "Fibertel WiFi503 2.4GHz_EXT";
+  const char* WIFI_PASSWORD     = "00427636604";
   const char* API_HOST_DOMAIN   = "parkelite.onrender.com";
 
   // --- RUTAS API ---
@@ -91,6 +91,9 @@
     
     // --- WIFI ---
     if (!wifiConnect()) { telnetLog("❌ Error al conectar el WiFi"); return; }
+
+    WiFi.setAutoReconnect(true);
+    WiFi.persistent(false);
 
     telnetServer.begin();
     telnetServer.setNoDelay(true);
@@ -458,7 +461,7 @@
 
     String url = String("https://") + API_HOST_DOMAIN + ENDPOINT_CONFIRM_ARRIVAL + "/" + reservationId;
 
-    const int MAX_TRIES = 4;
+    const int MAX_TRIES = 2;
     int code = -1000;
     String resp;
 
@@ -466,7 +469,7 @@
       telnetLog("💾 freeHeap(before)= " + String(ESP.getFreeHeap()));
       WiFiClientSecure client; 
       client.setInsecure();
-      client.setTimeout(15000);
+      client.setTimeout(25000);
 
       HTTPClient http;
       if (!http.begin(client, url)) {
@@ -475,34 +478,41 @@
         continue;
       }
 
+      http.setTimeout(25000);
       http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+      http.useHTTP10(true);
       http.setReuse(false);
       http.addHeader("Accept", "application/json");
       http.addHeader("Content-Type", "application/json");
       http.setUserAgent("ParkElite-ESP8266/1.0");
 
       code = http.POST("{}");
-      resp = (code > 0) ? http.getString() : "";
+      resp = (code > 0 && code < 500) ? http.getString() : "";
       telnetLog("🚗 confirm-arrival -> " + String(code) + " (" + String(attempt) + "/" + String(MAX_TRIES) + ")"
                 + " | id=" + reservationId + " | body=" + resp);
-
+                
       http.end();
-      yield();
+      client.stop();
       telnetLog("💾 freeHeap(after)= " + String(ESP.getFreeHeap()));
 
-      if (code > 0) break;
-      delay(300 * attempt);
+      if (code >= 200 && code < 300) {
+        for (int i = 0; i < 4; i++) {
+          if (activeReservations[i].reservationId == reservationId) {
+            activeReservations[i].confirmed = false;
+            telnetLog("✅ Reserva -> pendiente: " + reservationId);
+            break;
+          }
+        }
+        return;
+      }
+
+      if (code == -1 && attempt < MAX_TRIES) {
+        telnetLog("⚠️ Reintentando en 2s...");
+        delay(2000);
+      }
     }
 
-    if (code >= 200 && code < 300) {
-      for (int i = 0; i < 4; i++) {
-        if (activeReservations[i].reservationId == reservationId) {
-          activeReservations[i].confirmed = false;
-        }
-      }
-    } else if (code == -1) {
-      telnetLog("⚠️ TLS/Conexión falló. Revisa WiFi/SNI/server cold start.");
-    }
+    telnetLog("❌ No se pudo confirmar después de " + String(MAX_TRIES) + " intentos");
   }
 
   void completarLlegada(String reservationId) {
@@ -535,27 +545,56 @@
     telnetLog("🚗 Completación de la reserva - Status: " + String(statusCode));
   }
 
-bool cancelarPorNoLlegada(String reservationId) {
-  WiFiClientSecure client; client.setInsecure();
-  HTTPClient http;
+  bool cancelarPorNoLlegada(String reservationId) {
+    if (reservationId.length() == 0) {
+      telnetLog("❌ reservationId vacío en cancelarPorNoLlegada");
+      return false;
+    }
 
-  bool ok = http.begin(client, API_HOST_DOMAIN, 443, String(ENDPOINT_CANCEL_RESERVATION) + String("?reservationId=") + reservationId, true);
-  if (!ok) { telnetLog("❌ begin() fallo en cancelarPorNoLlegada"); return false; }
+    WiFiClientSecure client; 
+    client.setInsecure();
+    HTTPClient http;
 
-  http.setTimeout(15000);
-  http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
-  http.setReuse(false);
-  http.addHeader("Accept", "application/json");
-  http.addHeader("Content-Type", "application/json");
+    String url = String("https://") + API_HOST_DOMAIN + ENDPOINT_CANCEL_RESERVATION + "?reservationId=" + reservationId;
+    
+    if (!http.begin(client, url)) { 
+      telnetLog("❌ begin() falló en cancelarPorNoLlegada"); 
+      return false; 
+    }
 
-  int code = http.POST("");
-  String resp = (code>0)? http.getString() : "";
-  telnetLog("🛑 cancel-arrival -> " + String(code) + " - " + http.errorToString(code) +
-            " | id=" + reservationId + " | body=" + resp);
-  http.end();
+    http.setTimeout(20000);
+    http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+    http.useHTTP10(true);
+    http.setReuse(false);
+    http.addHeader("Accept", "application/json");
+    http.addHeader("Content-Type", "application/json");
 
-  return (code >= 200 && code < 300);
-}
+    int code = http.POST(""); // POST vacío como query param
+    String resp = (code > 0) ? http.getString() : "";
+    
+    telnetLog("🛑 cancel-arrival -> " + String(code) + " | id=" + reservationId);
+    if (resp.length() > 0) {
+      telnetLog("📄 Respuesta: " + resp);
+    }
+    
+    http.end();
+    client.stop();
+
+    // 404 = éxito
+    if (code >= 200 && code < 300) {
+      return true;
+    } else if (code == 404) {
+      telnetLog("ℹ️ Reserva no encontrada (quizás ya cancelada)");
+      return true;
+    } else if (code == 409) {
+      telnetLog("ℹ️ Reserva no está en estado 'confirmado'");
+      return true;
+    } else if (code == 200 && resp.indexOf("\"allowed\":false") > 0) {
+      telnetLog("⏰ Aún dentro del tiempo de gracia (20 min)");
+      return false;
+    }
+    return false;
+  }
 
 void checkReservasExpiradasCanceladas() {
   telnetLog("🔄 Chequeando vencidas por no llegada (server decide)...");
@@ -776,7 +815,7 @@ void checkReservasExpiradasCanceladas() {
     mostrarEstadosReservas();
   }
 
-  void webCodigo() {
+void webCodigo() {
     if (!server.hasArg("code")) {
       server.send(200, "text/html", generateResultHTML("Error", "Falta código", true));
       return;
@@ -786,54 +825,68 @@ void checkReservasExpiradasCanceladas() {
     String codeNorm = String(codeInt);
 
     StaticJsonDocument<128> j;
-    j["code"] = server.arg("code").toInt();
+    j["code"] = codeInt;
     String payload;
     serializeJson(j, payload);
 
-    WiFiClientSecure client;
-    client.setInsecure();
-    HTTPClient http;
-
     String url = String("https://") + API_HOST_DOMAIN + ENDPOINT_CHECKCODE;
+    
+    bool allowed = false;
+    String serverReservationId = "";
+    int spotNumber = -1;
+    
+    {
+      WiFiClientSecure client;
+      client.setInsecure();
+      HTTPClient http;
 
-    http.setTimeout(15000);
-    http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+      http.setTimeout(15000);
+      http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
 
-    if (!http.begin(client, url)) {
-      telnetLog("❌ begin() fallo en webCodigo");
-      return;
+      if (!http.begin(client, url)) {
+        telnetLog("❌ begin() fallo en webCodigo");
+        server.send(200, "text/html", generateResultHTML("Error", "Error de conexión", true));
+        return;
+      }
+
+      http.addHeader("Content-Type", "application/json");
+      http.addHeader("Accept", "application/json");
+
+      int statusCode = http.POST(payload);
+      String resp = (statusCode > 0) ? http.getString() : "";
+      
+      telnetLog("🔐 POST checkCode -> " + String(statusCode));
+
+      if (statusCode <= 0) {
+        http.end();
+        server.send(200, "text/html", generateResultHTML("Error", "No se pudo conectar", true));
+        return;
+      }
+
+      StaticJsonDocument<256> res;
+      DeserializationError err = deserializeJson(res, resp);
+      
+      http.end();
+      
+      if (err) {
+        server.send(200, "text/html", generateResultHTML("Error", "Error del servidor", true));
+        return;
+      }
+
+      allowed = res["allowed"];
+      spotNumber = res.containsKey("spotId") ? res["spotId"].as<int>() : -1;
+      serverReservationId = res.containsKey("reservationId") ? String((const char*)res["reservationId"]) : "";
     }
-
-    http.addHeader("Content-Type", "application/json");
-    http.addHeader("Accept", "application/json");
-
-    int statusCode = http.POST(payload);
-    String resp = (statusCode > 0) ? http.getString() : "";
-    http.end();
-
-    telnetLog("🔐 POST checkCode -> " + String(statusCode) + " | URL: " + url + " | Payload: " + payload);
-
-    if (statusCode <= 0) {
-      server.send(200, "text/html", generateResultHTML("Error", "No se pudo conectar con el servidor", true));
-      return;
-    }
-
-    StaticJsonDocument<256> res;
-    DeserializationError err = deserializeJson(res, resp);
-    if (err) {
-      server.send(200, "text/html", generateResultHTML("Error", "Error interno del servidor", true));
-      return;
-    }
-
-    bool allowed = res["allowed"];
-    int spotNumber = res.containsKey("spotId") ? res["spotId"].as<int>() : -1;
-    String serverReservationId = res.containsKey("reservationId") ? String((const char*)res["reservationId"]) : "";
-    bool matched = false;
-
+    
+    yield();
+    delay(100);
+    
+    telnetLog("💾 Heap antes de confirmar: " + String(ESP.getFreeHeap()));
+    
     if (allowed) {
       Serial.println("ABRIR");
       
-      // busca reserva activa por código
+      bool matched = false;
       for (int i = 0; i < 4; i++) {
         if (activeReservations[i].reservationId == serverReservationId) {
           matched = true;
@@ -841,20 +894,20 @@ void checkReservasExpiradasCanceladas() {
             activeReservations[i].startTime = millis();
             confirmarLlegada(activeReservations[i].reservationId);
           } else {
-            telnetLog("ℹ️ La reserva no esta confirmada: " + activeReservations[i].reservationId + " (ESP8266)");
+            telnetLog("ℹ️ Reserva no confirmada: " + activeReservations[i].reservationId);
           }
           break;
         }
       }
 
       if (!matched) {
-        telnetLog("❌ Código válido, pero no aparece en activeReservations: " + codeNorm);
+        telnetLog("❌ Código válido pero no en activeReservations: " + codeNorm);
       }
     }
 
-    String msg = allowed ? "Acceso permitido" : "Código inválido o reserva no activa";
-    server.send(200, "text/html", generateResultHTML(allowed ? "Éxito" : "Acceso denegado", msg, !allowed));
-  }
+    String msg = allowed ? "Acceso permitido" : "Código inválido";
+    server.send(200, "text/html", generateResultHTML(allowed ? "Éxito" : "Denegado", msg, !allowed));
+}
 
   // --- PÁGINA WEB ---
 
