@@ -56,24 +56,22 @@ void loop() {
 
 // --- MENSAJES ---
 void procesarComandosESP() {
-  /*
-  ESP8266 → ARDUINO:
-  PING	Comando de verificación de conexión. Arduino responde con PONG si está activo.
-  ABRIR	Orden para abrir la barrera. Arduino abre el servo 5 segundos y luego lo cierra automáticamente.
-  CONSULTAR_OCUPACION	Solicita el estado de ocupación de las plazas. Arduino responde con ESTADO_OCUPACION:....
-  STATUS_REQUEST	Solicita el estado completo del sistema (sensores y barrera). Arduino responde con SYSTEM_STATUS:....
-  RESET_SENSORS	Orden para reiniciar/resetear todos los sensores de ocupación. Arduino responde con SENSORS_RESET_OK.
+    /*
+    ESP8266 → ARDUINO:
+    PING	Comando de verificación de conexión. Arduino responde con PONG si está activo.
+    ABRIR	Orden para abrir la barrera. Arduino abre el servo 5 segundos y luego lo cierra automáticamente.
+    CONSULTAR_OCUPACION	Solicita el estado de ocupación de las plazas. Arduino responde con ESTADO_OCUPACION:....
+    STATUS_REQUEST	Solicita el estado completo del sistema (sensores y barrera). Arduino responde con SYSTEM_STATUS:....
 
-  ARDUINO → ESP8266:
-  PONG	Respuesta al PING enviado por ESP, confirma que Arduino está conectado.
-  BARRERA_ABIERTA	Confirma que la barrera fue abierta (respuesta al comando ABRIR).
-  SENSOR_DETECTING:<n>	Notifica que un sensor detectó un vehículo en la plaza <n>. Estado inicial antes de confirmar ocupación.
-  OCUPACION_CONFIRMADA:<n>	Confirma que la plaza <n> está ocupada después del tiempo de confirmación (60s).
-  LIBERADO:<n>	Notifica que la plaza <n> se liberó.
-  ESTADO_OCUPACION:<estados>:<plazas>	Envía el estado de ocupación de todas las plazas (1 = ocupada, 0 = libre). Incluye correspondencia de IDs de plaza.
-  SYSTEM_STATUS:SENSORS_OK:<estados>:BARRIER_OK:1	Estado completo de sensores y barrera. Indica si sensores están funcionando y si barrera está operativa.
-  SENSORS_RESET_OK	Confirma que los sensores fueron reseteados tras el comando RESET_SENSORS.
-  */
+    ARDUINO → ESP8266:
+    PONG	Respuesta al PING enviado por ESP, confirma que Arduino está conectado.
+    BARRERA_ABIERTA	Confirma que la barrera fue abierta (respuesta al comando ABRIR).
+    SENSOR_DETECTING:<n>	Notifica que un sensor detectó un vehículo en la plaza <n>. Estado inicial antes de confirmar ocupación.
+    OCUPACION_CONFIRMADA:<n>	Confirma que la plaza <n> está ocupada después del tiempo de confirmación (60s).
+    LIBERADO:<n>	Notifica que la plaza <n> se liberó.
+    ESTADO_OCUPACION:<estados>:<plazas>	Envía el estado de ocupación de todas las plazas (1 = ocupada, 0 = libre). Incluye correspondencia de IDs de plaza.
+    SYSTEM_STATUS:SENSORS_OK:<estados>:BARRIER_OK:1	Estado completo de sensores y barrera. Indica si sensores están funcionando y si barrera está operativa.
+    */
 
   if (Serial.available()) {
     String orden = Serial.readStringUntil('\n');
