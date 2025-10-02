@@ -9,8 +9,8 @@
   #include <MFRC522.h>
 
   // --- CONFIGURACIÓN ---
-  const char* WIFI_SSID         = "Fibertel WiFi503 2.4GHz_EXT";
-  const char* WIFI_PASSWORD     = "00427636604";
+  const char* WIFI_SSID         = "LAPTOP ANEXO 1";
+  const char* WIFI_PASSWORD     = "Anexo2043";
   const char* API_HOST_DOMAIN   = "parkelite.onrender.com";
 
   // --- RUTAS API ---
@@ -632,15 +632,16 @@ void checkReservasExpiradasCanceladas() {
     */
 
     const char* comandos_esp[] = {"PING", "ABRIR", "CONSULTAR_OCUPACION", "STATUS_REQUEST"};
+    const size_t N = sizeof(comandos_esp) / sizeof(comandos_esp[0]);
     bool coincide = false;
 
-    for (int i = 0; i < 5; i++) {
+    for (size_t i = 0; i < N; i++) {
       if (strcmp(message.c_str(), comandos_esp[i]) == 0) {
         coincide = true;
         break;
       }
     }
-
+    
     if (coincide) return;
 
     if (message == "PONG") {
