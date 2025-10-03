@@ -188,7 +188,7 @@ class _HomeScreen extends State<HomeScreen> {
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
-                              'Bienvenido de vuelta',
+                              'Bienvenido a ParkElite',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Colors.grey[700],

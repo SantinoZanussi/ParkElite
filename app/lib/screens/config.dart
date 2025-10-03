@@ -138,20 +138,20 @@ class _ConfigScreenState extends State<ConfigScreen> {
                             },
                           ),
                           const SizedBox(height: 20),
-                          ConfigCustomButton(
-                            context: context,
-                            text: 'Desarrolladores (no hecho)',
-                            icon: Icons.code,
-                            onTap: () async {
-                              try {
-                              //navigateTo(context, 'backLogin');             
-                              } catch (e) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Error al cargar desarrolladores')),
-                                );
-                              }
-                            },
-                          ),
+                          // ConfigCustomButton(
+                          //   context: context,
+                          //   text: 'Desarrolladores (no hecho)',
+                          //   icon: Icons.code,
+                          //   onTap: () async {
+                          //     try {
+                          //     //navigateTo(context, 'backLogin');             
+                          //     } catch (e) {
+                          //       ScaffoldMessenger.of(context).showSnackBar(
+                          //         SnackBar(content: Text('Error al cargar desarrolladores')),
+                          //       );
+                          //     }
+                          //   },
+                          // ),
                         ],
                       ),
                     ),

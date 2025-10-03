@@ -183,7 +183,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       BuildInputField(
                         hintText: 'Fecha de nacimiento (DD/MM/AAAA)',
                         icon: Icon(Icons.calendar_month, color: Color(0xFF3e4a77)),
-                        keyboardType: TextInputType.datetime,
+                        keyboardType: TextInputType.phone,
                         controller: birthdayController,
                       ),
                       const SizedBox(height: 30),

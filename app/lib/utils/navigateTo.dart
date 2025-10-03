@@ -49,7 +49,7 @@ void navigateTo(BuildContext context, String screenName) {
     ScaffoldMessenger.of(
       context,
     );
-  } else if (["desarrolladores", "contacto", "tarifas", ""].contains(screenName)) {
+  } else if (["contacto", "tarifas", ""].contains(screenName)) {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text('Navegando a: $screenName (Pantalla no implementada)')));

@@ -53,6 +53,15 @@ exports.createUser = async (req, res) => {
 
     birthday = parsedBirthday.toDate();
 
+    const findEmail = await User.findOne({ email: email });
+    if (findEmail) {
+        return res.status(400).json({ message: 'El correo electrónico ya está registrado' });
+    }
+
+    if (!email.includes('@') && !email.includes('.com')) {
+        return res.status(400).json({ message: 'El correo electrónico no es válido' });
+    }
+
     try {
         const user = new User({
             userId: user_id,

@@ -277,8 +277,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                     // disponibilidad
                     Text(
                       hasUserReservation 
-                          ? 'Tu reserva confirmada' 
-                          : 'Disponibilidad: ${availability['occupied']}/${availability['total']}',
+                          ? 'Tu reserva fue confirmada' 
+                          : 'Ocupación: ${availability['occupied']}/${availability['total']}',
                       style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                     Text(
