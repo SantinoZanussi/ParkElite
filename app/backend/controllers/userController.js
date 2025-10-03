@@ -9,6 +9,9 @@ const SECRET_KEY = process.env.JWT_SECRET || 1234567890;
 exports.loginUser = async (req, res) => {
     const { email, password } = req.body;
     try {
+        if (!email.includes('@') || !email.includes('.com')) {
+            return res.status(400).json({ message: 'El correo electrónico no es válido' });
+        }
         const user = await User.findOne({ email: email })
         if (!user) {
             return res.status(404).json({ message: 'Usuario no encontrado' });
