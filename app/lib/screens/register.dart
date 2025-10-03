@@ -252,8 +252,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 }
                               }).catchError((error) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Error de conexión'),
+                                  SnackBar(
+                                    content: Text('Error: ${error.toString()}'),
                                   ),
                                 );
                               });

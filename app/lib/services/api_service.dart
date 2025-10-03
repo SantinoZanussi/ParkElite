@@ -104,10 +104,10 @@ class ApiService {
         await storage.write(key: 'auth_token', value: token);
         return { 'dataUser': data['user'], 'status': 'success', 'statusCode': response.statusCode };
       } else {
-        throw Exception('Error al registrarse: ${response.statusCode}');
+        final errorData = jsonDecode(response.body);
+        throw Exception('Error al registrarse: ${errorData['message']} - ${response.statusCode}');
       }
     } catch (e) {
-      print('Error de conexión en register: $e');
       throw Exception('Error de conexión: $e');
     }
   }
