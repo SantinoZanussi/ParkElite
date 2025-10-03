@@ -69,10 +69,10 @@ class ApiService {
         await storage.write(key: 'auth_token', value: token);
         return { 'dataUser': data['user'], 'status': 'success', 'statusCode': response.statusCode };
       } else {
-        throw Exception('Error al iniciar sesión: ${response.statusCode}');
+        final errorData = jsonDecode(response.body);
+        throw Exception('Error al iniciar sesión: ${errorData['message']} - ${response.statusCode}');
       }
     } catch (e) {
-      print('Error de conexión en login: $e');
       throw Exception('Error de conexión: $e');
     }
   }
@@ -135,7 +135,6 @@ class ApiService {
         throw Exception('Error al obtener las reservas: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error de conexión en getUser: $e');
       throw Exception('Error de conexión: $e');
     }
   }
@@ -163,7 +162,6 @@ class ApiService {
         throw Exception('Error al obtener las reservas: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error de conexión en getUserReservations: $e');
       throw Exception('Error de conexión: $e');
     }
   }
@@ -206,7 +204,6 @@ class ApiService {
         throw Exception(errorData['message'] ?? 'Error al crear la reserva');
       }
     } catch (e) {
-      print('Error de conexión en createReservation: $e');
       throw Exception('Error de conexión: $e');
     }
   }
@@ -245,7 +242,6 @@ class ApiService {
         throw Exception('Error al obtener espacios disponibles: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error de conexión en getAvailableSpots: $e');
       throw Exception('Error de conexión: $e');
     }
   }
@@ -271,7 +267,6 @@ class ApiService {
         throw Exception(errorData['message'] ?? 'Error al cancelar la reserva');
       }
     } catch (e) {
-      print('Error de conexión en cancelReservation: $e');
       throw Exception('Error de conexión: $e');
     }
   }
@@ -304,7 +299,6 @@ class ApiService {
         throw Exception('Error al obtener estadísticas: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error de conexión en getOccupancyStats: $e');
       throw Exception('Error de conexión: $e');
     }
   }
@@ -314,7 +308,6 @@ class ApiService {
     try {
       await storage.delete(key: 'auth_token');
     } catch (e) {
-      print('Error de conexión en unlogout: $e');
       throw Exception('Error de conexión: $e');
     }
   }
@@ -347,7 +340,6 @@ class ApiService {
       print('⏳ Timeout al verificar estado del servidor: $e');
       throw Exception('El servidor no responde. Inténtalo más tarde.');
     } catch (e) {
-      print('🔴 Error al verificar estado del servidor: $e');
       throw Exception('Error de conexión: $e');
     }
   }
@@ -375,7 +367,6 @@ class ApiService {
         throw Exception('Error al obtener las reservas: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error de conexión en getCode: $e');
       throw Exception('Error de conexión: $e');
     }
   }
