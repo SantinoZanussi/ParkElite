@@ -879,16 +879,17 @@ void webCodigo() {
     
     telnetLog("💾 Heap antes de confirmar: " + String(ESP.getFreeHeap()));
     
+    bool matched = false;
+
     if (allowed) {
-      Serial.println("ABRIR");
       
-      bool matched = false;
       for (int i = 0; i < 4; i++) {
         if (activeReservations[i].reservationId == serverReservationId) {
-          matched = true;
           if (activeReservations[i].confirmed) {
+            matched = true;
             activeReservations[i].startTime = millis();
             confirmarLlegada(activeReservations[i].reservationId);
+            Serial.println("ABRIR");
           } else {
             telnetLog("ℹ️ Reserva no confirmada: " + activeReservations[i].reservationId);
           }
@@ -902,7 +903,8 @@ void webCodigo() {
     }
 
     String msg = allowed ? "Acceso permitido" : "Código inválido";
-    server.send(200, "text/html", generateResultHTML(allowed ? "Éxito" : "Denegado", msg, !allowed));
+    msg = matched ? msg : "Acceso denegado";
+    server.send(200, "text/html", generateResultHTML((allowed && matched) ? "Éxito" : "Denegado", msg, (!allowed || !matched)));
 }
 
   // --- PÁGINA WEB ---
@@ -1090,95 +1092,60 @@ void webCodigo() {
   }
 
   String generateResultHTML(const String& title, const String& message, bool isError) {
+    const char* redirectTo = "/";
+    const int countdownSec = 5;
+
     String html = "<html><head>"
       "<meta charset='UTF-8'>"
       "<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
       "<style>"
-      "* { margin: 0; padding: 0; box-sizing: border-box; }"
-      "body {"
-          "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;"
-          "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"
-          "min-height: 100vh;"
-          "display: flex;"
-          "align-items: center;"
-          "justify-content: center;"
-          "padding: 20px;"
-      "}"
-      ".container {"
-          "background: rgba(255, 255, 255, 0.95);"
-          "backdrop-filter: blur(10px);"
-          "border-radius: 20px;"
-          "padding: 40px 30px;"
-          "box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);"
-          "max-width: 500px;"
-          "width: 100%;"
-          "text-align: center;"
-          "border: 1px solid rgba(255, 255, 255, 0.2);"
-      "}"
-      ".icon {"
-          "width: 80px;"
-          "height: 80px;"
-          "margin: 0 auto 20px;"
-          "border-radius: 50%;"
-          "display: flex;"
-          "align-items: center;"
-          "justify-content: center;"
-          "font-size: 40px;"
-          "font-weight: bold;"
-      "}"
-      ".icon-success {"
-          "background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);"
-          "color: white;"
-      "}"
-      ".icon-error {"
-          "background: linear-gradient(135deg, #ff6b6b 0%, #ffa500 100%);"
-          "color: white;"
-      "}"
-      "h3 {"
-          "font-size: 28px;"
-          "margin-bottom: 15px;"
-          "font-weight: 600;"
-      "}"
-      ".title-success { color: #2d5a87; }"
-      ".title-error { color: #c53030; }"
-      "p {"
-          "font-size: 16px;"
-          "line-height: 1.6;"
-          "margin-bottom: 30px;"
-          "color: #4a5568;"
-      "}"
-      ".btn {"
-          "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"
-          "color: white;"
-          "border: none;"
-          "padding: 15px 30px;"
-          "border-radius: 50px;"
-          "font-size: 16px;"
-          "font-weight: 600;"
-          "cursor: pointer;"
-          "transition: all 0.3s ease;"
-          "box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);"
-          "text-decoration: none;"
-          "display: inline-block;"
-      "}"
-      ".btn:hover {"
-          "transform: translateY(-2px);"
-          "box-shadow: 0 8px 25px rgba(102, 126, 234, 0.6);"
-      "}"
-      "@media (max-width: 480px) {"
-          ".container { padding: 30px 20px; }"
-          "h3 { font-size: 24px; }"
-          ".icon { width: 60px; height: 60px; font-size: 30px; }"
-      "}"
+      "*{margin:0;padding:0;box-sizing:border-box}"
+      "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;"
+        "background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);min-height:100vh;"
+        "display:flex;align-items:center;justify-content:center;padding:20px}"
+      ".container{background:rgba(255,255,255,.95);backdrop-filter:blur(10px);border-radius:20px;"
+        "padding:40px 30px;box-shadow:0 20px 40px rgba(0,0,0,.1);max-width:500px;width:100%;"
+        "text-align:center;border:1px solid rgba(255,255,255,.2)}"
+      ".icon{width:80px;height:80px;margin:0 auto 20px;border-radius:50%;display:flex;"
+        "align-items:center;justify-content:center;font-size:40px;font-weight:bold}"
+      ".icon-success{background:linear-gradient(135deg,#4facfe 0%,#00f2fe 100%);color:#fff}"
+      ".icon-error{background:linear-gradient(135deg,#ff6b6b 0%,#ffa500 100%);color:#fff}"
+      "h3{font-size:28px;margin-bottom:15px;font-weight:600}"
+      ".title-success{color:#2d5a87}.title-error{color:#c53030}"
+      "p{font-size:16px;line-height:1.6;margin-bottom:22px;color:#4a5568}"
+      ".btn{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;border:none;"
+        "padding:14px 26px;border-radius:50px;font-size:16px;font-weight:600;cursor:pointer;"
+        "transition:.3s;box-shadow:0 4px 15px rgba(102,126,234,.4);text-decoration:none;display:inline-block}"
+      ".btn:hover{transform:translateY(-2px);box-shadow:0 8px 25px rgba(102,126,234,.6)}"
+      ".count-wrap{margin:8px 0 18px}"
+      ".badge{display:inline-block;background:#edf2f7;color:#2d3748;border-radius:9999px;"
+        "padding:8px 14px;font-weight:700;letter-spacing:.5px}"
+      ".progress{height:8px;background:#e2e8f0;border-radius:9999px;overflow:hidden;margin-top:12px}"
+      ".bar{display:block;height:100%;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);width:100%;"
+        "animation:shrink 5s linear forwards}"
+      "@keyframes shrink{from{width:100%}to{width:0%}}"
+      "@media(max-width:480px){.container{padding:30px 20px}h3{font-size:24px}.icon{width:60px;height:60px;font-size:30px}}"
       "</style>"
-      "</head><body>"
-      "<div class='container'>";
-    
+      "</head><body><div class='container'>";
+
     html += "<div class='icon " + String(isError ? "icon-error'>✕" : "icon-success'>✓") + "</div>";
     html += "<h3 class='" + String(isError ? "title-error" : "title-success") + "'>" + title + "</h3>";
     html += "<p>" + message + "</p>";
-    html += "<button class='btn' onclick=\"window.location.href='/';\">Volver al formulario</button>";
-    html += "</div></body></html>";
-    
+
+    html += "<div class='count-wrap'>"
+              "<span class='badge'>Volviendo en <span id='count'>" + String(countdownSec) + "</span> s…</span>"
+              "<div class='progress'><span class='bar'></span></div>"
+            "</div>";
+
+    html += "<button class='btn' onclick=\"window.location.href='" + String(redirectTo) + "'\">Volver ahora</button>"
+            "</div>";
+
+    html += "<script>"
+            "var t=" + String(countdownSec) + ";"
+            "var el=document.getElementById('count');"
+            "var iv=setInterval(function(){t--; if(el) el.textContent=t; if(t<=0){clearInterval(iv);location.href='" + String(redirectTo) + "'}},1000);"
+            "</script>";
+
+    html += "</body></html>";
     return html;
   }
