@@ -279,19 +279,20 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                       hasUserReservation 
                           ? 'Tu reserva fue confirmada' 
                           : 'Ocupación: ${availability['occupied']}/${availability['total']}',
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
                     ),
                     hasUserReservation
                       ? RichText(
                           text: TextSpan(
-                            style: const TextStyle(fontSize: 14, color: Color(0xFF59806e)),
+                            style: const TextStyle(fontSize: 14.5, color: Color(0xFF59806e)),
                             children: [
                               TextSpan(
                                 text: _getUserReservationInfo(hour).split(' - ')[0],
-                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Color(0xFF44A90E2)),
                               ),
                               TextSpan(
                                 text: ' - ${_getUserReservationInfo(hour).split(' - ')[1]}',
+                                style : const TextStyle(fontStyle: FontStyle.italic),
                               ),
                             ],
                           ),
