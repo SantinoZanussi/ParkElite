@@ -281,15 +281,28 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                           : 'Ocupación: ${availability['occupied']}/${availability['total']}',
                       style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
-                    Text(
-                      hasUserReservation
-                          ? _getUserReservationInfo(hour)
-                          : (isAvailable ? 'Lugares disponibles' : 'Sin lugares disponibles'),
-                      style: TextStyle(
-                        color: hasUserReservation ? const Color(0xFF59806e) : Color(0xFF154e91),
-                        fontSize: 14,
+                    hasUserReservation
+                      ? RichText(
+                          text: TextSpan(
+                            style: const TextStyle(fontSize: 14, color: Color(0xFF59806e)),
+                            children: [
+                              TextSpan(
+                                text: _getUserReservationInfo(hour).split(' - ')[0],
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                              ),
+                              TextSpan(
+                                text: ' - ${_getUserReservationInfo(hour).split(' - ')[1]}',
+                              ),
+                            ],
+                          ),
+                        )
+                      : Text(
+                          isAvailable ? 'Lugares disponibles' : 'Sin lugares disponibles',
+                          style: const TextStyle(
+                            color: Color(0xFF154e91),
+                            fontSize: 14,
+                          ),
                       ),
-                    ),
                     const SizedBox(height: 7),
                     // barra de progreso
                     LinearProgressIndicator(

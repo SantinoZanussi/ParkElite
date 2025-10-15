@@ -889,7 +889,6 @@ void webCodigo() {
             matched = true;
             activeReservations[i].startTime = millis();
             confirmarLlegada(activeReservations[i].reservationId);
-            Serial.println("ABRIR");
           } else {
             telnetLog("ℹ️ Reserva no confirmada: " + activeReservations[i].reservationId);
           }
@@ -900,6 +899,11 @@ void webCodigo() {
       if (!matched) {
         telnetLog("❌ Código válido pero no en activeReservations: " + codeNorm);
       }
+    }
+
+    if (allowed && matched) {
+      Serial.println("ABRIR");
+      Serial.flush();
     }
 
     String msg = allowed ? "Acceso permitido" : "Código inválido";
