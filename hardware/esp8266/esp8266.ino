@@ -7,6 +7,7 @@
   #include <ArduinoJson.h>
   #include <SPI.h>
   #include <MFRC522.h>
+  #include <SoftwareSerial.h>
 
   // --- CONFIGURACIÓN ---
   const char* WIFI_SSID         = "LAPTOP ANEXO 1";
@@ -22,11 +23,15 @@
   static const char* ENDPOINT_CANCEL_SPECIFIC_RESERVATION = "/api/reservas/cancel";
   static const char* ENDPOINT_GET_ACTIVE_RESERVATIONS = "/api/reservas/active-reservations";
 
-  // --- PINES RFID ---
+  // --- PINES RFID Y SOFTWARE SERIAL ---
   #define SS_PIN D8
   #define RST_PIN D4
 
-  // --- SERVIDOR WEB, LOGGER, Y LECTOR RFID ---
+  #define ARD_RX D3
+  #define ARD_TX D2
+
+  // --- SERVIDOR WEB, LOGGER, SOFTWARE SERIAL, Y LECTOR RFID ---
+  SoftwareSerial espSerial(ARD_RX, ARD_TX, false);
   WiFiServer telnetServer(23);
   WiFiClient telnetClient;
   ESP8266WebServer server(80);
@@ -86,7 +91,7 @@
   void telnetLog(const String &msg);
 
   void setup() {
-    Serial.begin(9600);
+    espSerial.begin(9600);
     delay(200);
     
     // --- WIFI ---
@@ -190,7 +195,7 @@
     String timestamp = "[" + String(millis() / 1000) + "s] ";
     String fullMsg = timestamp + msg;
     
-    //Serial.println(fullMsg);
+    //espSerial.println(fullMsg);
     
     if (!telnetReady) {
       // Acumular en buffer si telnet no está listo
@@ -276,7 +281,7 @@
           ESP.restart();
         }
         else if (command == "arduino") {
-          Serial.println("PING");
+          espSerial.println("PING");
           telnetLog("→ PING manual enviado a Arduino");
         }
       }
@@ -330,13 +335,13 @@
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     
     String msg = "🔌 Conectando WiFi (ESP8266)";
-    Serial.print(msg);
+    espSerial.print(msg);
     if (telnetReady) telnetLog(msg);
     
     unsigned long start = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - start < 15000) {
       delay(500);
-      Serial.print('.');
+      //espSerial.print('.');
       if (telnetReady) telnetLog(".");
     }
     
@@ -344,8 +349,8 @@
       String successMsg = "✅ WiFi conectado (ESP8266)";
       String ipMsg = "💻 IPv4: " + WiFi.localIP().toString();
       
-      Serial.println(successMsg);
-      Serial.println(ipMsg);
+      //espSerial.println(successMsg);
+      //espSerial.println(ipMsg);
       
       if (telnetReady) {
         telnetLog(successMsg);
@@ -362,13 +367,13 @@
 
   void Arduino() {
     if (millis() - ultPing >= TIEMPO_PING) {
-      Serial.println("PING");
+      espSerial.println("PING");
       ultPing = millis();
       //telnetLog("→ PING enviado");
     }
 
-    while (Serial.available()) {
-      String mensaje = Serial.readStringUntil('\n');
+    while (espSerial.available()) {
+      String mensaje = espSerial.readStringUntil('\n');
       mensaje.trim();
       if (mensaje.length() > 0) {
         telnetLog("← ARDUINO: " + mensaje);
@@ -438,7 +443,7 @@
 
     if (esUIDValido(mfrc522.uid.uidByte)) {
       telnetLog("✅ RFID Tag válido, enviando orden... (ESP8266)");
-      Serial.println("ABRIR");
+      espSerial.println("ABRIR");
       delay(1000);
     }
 
@@ -902,8 +907,8 @@ void webCodigo() {
     }
 
     if (allowed && matched) {
-      Serial.println("ABRIR");
-      Serial.flush();
+      espSerial.println("ABRIR");
+      //espSerial.flush();
     }
 
     String msg = allowed ? "Acceso permitido" : "Código inválido";
