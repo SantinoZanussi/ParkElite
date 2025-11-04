@@ -24,8 +24,8 @@
   static const char* ENDPOINT_GET_ACTIVE_RESERVATIONS = "/api/reservas/active-reservations";
 
   // --- PINES RFID Y SOFTWARE SERIAL ---
-  #define SS_PIN D0
-  #define RST_PIN D1
+  #define SS_PIN D1
+  #define RST_PIN D0
 
   #define ARD_RX D3
   #define ARD_TX D2
