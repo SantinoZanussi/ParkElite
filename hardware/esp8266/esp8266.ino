@@ -24,8 +24,8 @@
   static const char* ENDPOINT_GET_ACTIVE_RESERVATIONS = "/api/reservas/active-reservations";
 
   // --- PINES RFID Y SOFTWARE SERIAL ---
-  #define SS_PIN D8
-  #define RST_PIN D4
+  #define SS_PIN D0
+  #define RST_PIN D1
 
   #define ARD_RX D3
   #define ARD_TX D2
@@ -39,6 +39,7 @@
 
   // --- RFIDs AUTORIZADOS ---
   const byte uid1[] = {0x03, 0x77, 0xFF, 0x13};
+  const byte uid2[] = {0x93, 0x5D, 0x0C, 0x14};
 
   // --- TIEMPOS ---
   unsigned long ultRFIDCheck = 0;
@@ -211,11 +212,14 @@
   }
 
   bool esUIDValido(byte* uid) {
-    for (byte i = 0; i < 4; i++) {
-      if (uid[i] != uid1[i]) return false;
-    }
-    return true;
+  bool match1 = true, match2 = true;
+  for (byte i = 0; i < 4; i++) {
+    if (uid[i] != uid1[i]) match1 = false;
+    if (uid[i] != uid2[i]) match2 = false;
   }
+  return match1 || match2;
+}
+
 
   void handleTelnetClients() {
     WiFiClient newClient = telnetServer.available();
