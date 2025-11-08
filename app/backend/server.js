@@ -15,9 +15,11 @@ app.use(cors());
 const reservationRoutes = require('./routes/reservationRoutes');
 const userRoutes = require('./routes/userRoutes');
 const healthCheckRoutes = require('./routes/health-check');
+const notificationRoutes = require('./routes/notificationRoutes');
 app.use('/api/reservas', reservationRoutes);
 app.use('/api/auth', userRoutes);
 app.use('/api/health-check', healthCheckRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 //! Middleware para manejar 404 en rutas API
 /*

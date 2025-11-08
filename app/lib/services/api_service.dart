@@ -370,4 +370,116 @@ class ApiService {
       throw Exception('Error de conexión: $e');
     }
   }
+
+  Future<Map<String, dynamic>> getNotifications() async {
+    _ensureInitialized();
+    try {
+      final internet = await ConnectivityService.hasInternet();
+      if (!internet) { throw Exception('❎ No hay conexión a internet.'); }
+
+      final token = await getToken();
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/notifications'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json'
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception('Error al obtener notificaciones: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error de conexión: $e');
+    }
+  }
+
+  Future<void> markNotificationAsRead(String notificationId) async {
+    _ensureInitialized();
+    try {
+      final internet = await ConnectivityService.hasInternet();
+      if (!internet) { throw Exception('❎ No hay conexión a internet.'); }
+
+      final token = await getToken();
+
+      final response = await http.put(
+        Uri.parse('$baseUrl/notifications/$notificationId/read'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json'
+        },
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Error al marcar notificación: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error de conexión: $e');
+    }
+  }
+
+  Future<void> markAllNotificationsAsRead() async {
+    _ensureInitialized();
+    try {
+      final internet = await ConnectivityService.hasInternet();
+      if (!internet) { throw Exception('❎ No hay conexión a internet.'); }
+
+      final token = await getToken();
+
+      final response = await http.put(
+        Uri.parse('$baseUrl/notifications/read-all'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json'
+        },
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Error al marcar notificaciones: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error de conexión: $e');
+    }
+  }
+
+  Future<void> deleteNotification(String notificationId) async {
+    _ensureInitialized();
+    try {
+      final internet = await ConnectivityService.hasInternet();
+      if (!internet) { throw Exception('❎ No hay conexión a internet.'); }
+
+      final token = await getToken();
+
+      final response = await http.delete(
+        Uri.parse('$baseUrl/notifications/$notificationId'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json'
+        },
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Error al eliminar notificación: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error de conexión: $e');
+    }
+  }
+
+  Future<int> getUnreadNotificationsCount() async {
+    _ensureInitialized();
+    try {
+      final internet = await ConnectivityService.hasInternet();
+      if (!internet) { return 0; }
+
+      final data = await getNotifications();
+      return data['unreadCount'] ?? 0;
+    } catch (e) {
+      print('Error al obtener contador: $e');
+      return 0;
+    }
+  }
 }

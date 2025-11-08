@@ -10,8 +10,8 @@
   #include <SoftwareSerial.h>
 
   // --- CONFIGURACIÓN ---
-  const char* WIFI_SSID         = "LAPTOP ANEXO 1";
-  const char* WIFI_PASSWORD     = "Anexo2043";
+  const char* WIFI_SSID         = "Fibertel WiFi503 2.4GHz_EXT";
+  const char* WIFI_PASSWORD     = "00427636604";
   const char* API_HOST_DOMAIN   = "parkelite.onrender.com";
 
   // --- RUTAS API ---
@@ -22,6 +22,7 @@
   static const char* ENDPOINT_CANCEL_RESERVATION = "/api/reservas/cancel-arrival";
   static const char* ENDPOINT_CANCEL_SPECIFIC_RESERVATION = "/api/reservas/cancel";
   static const char* ENDPOINT_GET_ACTIVE_RESERVATIONS = "/api/reservas/active-reservations";
+  static const char* ENDPOINT_CHECK_CONFLICTS = "/api/reservas/check-conflicts";
 
   // --- PINES RFID Y SOFTWARE SERIAL ---
   #define SS_PIN D1
@@ -52,6 +53,7 @@
   const unsigned long TIEMPO_PING = 120000; // 2 minutos
   const unsigned long TIEMPO_OBTENER_RESERVAS = 600000; // 10 minutos
   const unsigned long TIEMPO_CHECK_EXPIRADAS = 180000; // 3 minutos
+  const unsigned long TIEMPO_REPORTAR_CONFLICTOS = 60000; // 1 minuto
 
   // --- VARIABLES BASE ---
   struct ActiveReservation {
@@ -69,6 +71,7 @@
   ActiveReservation activeReservations[4];
   bool spotOccupied[4] = {false, false, false, false};
   int spotMapping[4] = {4, 6, 3, 5}; // Plazas
+  unsigned long lastOccupancyReport[4] = {0, 0, 0, 0};
 
   // --- PROTOTIPOS ---
   bool wifiConnect();
@@ -184,6 +187,13 @@
       if (millis() - ultExpiracionCheck > TIEMPO_CHECK_EXPIRADAS) {
         checkReservasExpiradasCanceladas();
         ultExpiracionCheck = millis();
+      }
+
+      for (int i = 0; i < 4; i++) {
+        if (spotOccupied[i] && (millis() - lastOccupancyReport[i] > TIEMPO_REPORTAR_CONFLICTOS)) {
+          reportSpotConflict(spotMapping[i], true);
+          lastOccupancyReport[i] = millis();
+        }
       }
 
       yield();
@@ -324,6 +334,49 @@
     return -11;
   }
 
+  void reportSpotConflict(int spotNumber, bool occupied) {
+    if (WiFi.status() != WL_CONNECTED) {
+      telnetLog("❌ WiFi desconectado al reportar conflicto");
+      return;
+    }
+
+    WiFiClientSecure client;
+    client.setInsecure();
+    HTTPClient http;
+    
+    String url = String("https://") + API_HOST_DOMAIN + ENDPOINT_CHECK_CONFLICTS;
+    
+    StaticJsonDocument<128> doc;
+    doc["spotNumber"] = spotNumber;
+    doc["occupied"] = occupied;
+    
+    String payload;
+    serializeJson(doc, payload);
+    
+    if (!http.begin(client, url)) {
+      telnetLog("❌ begin() falló en reportSpotConflict");
+      return;
+    }
+    
+    http.setTimeout(15000);
+    http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+    http.addHeader("Content-Type", "application/json");
+    http.addHeader("Accept", "application/json");
+    
+    int statusCode = http.POST(payload);
+    String response = (statusCode > 0) ? http.getString() : "";
+    
+    http.end();
+    client.stop();
+    
+    if (statusCode == 200) {
+      telnetLog("✅ Conflicto reportado - Plaza " + String(spotNumber) + 
+                " (" + String(occupied ? "ocupada" : "libre") + ")");
+    } else {
+      telnetLog("⚠️ Error al reportar conflicto: " + String(statusCode));
+    }
+  }
+
   void testServer() {
     String url = String("https://") + API_HOST_DOMAIN + ENDPOINT_CHECKHEALTHSERVER;
     String body;
@@ -345,7 +398,7 @@
     unsigned long start = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - start < 15000) {
       delay(500);
-      //espSerial.print('.');
+      espSerial.print('.');
       if (telnetReady) telnetLog(".");
     }
     
@@ -353,8 +406,8 @@
       String successMsg = "✅ WiFi conectado (ESP8266)";
       String ipMsg = "💻 IPv4: " + WiFi.localIP().toString();
       
-      //espSerial.println(successMsg);
-      //espSerial.println(ipMsg);
+      espSerial.println(successMsg);
+      espSerial.println(ipMsg);
       
       if (telnetReady) {
         telnetLog(successMsg);
@@ -668,6 +721,9 @@ void checkReservasExpiradasCanceladas() {
         spotOccupied[spotIndex] = true;
         telnetLog("🚗 Plaza " + String(spotNumber) + " ocupada confirmada");
       }
+
+      reportSpotConflict(spotNumber, true);
+      lastOccupancyReport[spotIndex] = millis();
     }
     else if (message.startsWith("LIBERADO:")) {
       int spotNumber = message.substring(9).toInt();
@@ -675,6 +731,9 @@ void checkReservasExpiradasCanceladas() {
       if (spotIndex >= 0) {
         spotOccupied[spotIndex] = false;
         telnetLog("🅿️ Plaza " + String(spotNumber) + " liberada");
+
+        reportSpotConflict(spotNumber, false);
+        lastOccupancyReport[spotIndex] = millis();
         
         // Limpiar reserva confirmada
         for (int i = 0; i < 4; i++) {
