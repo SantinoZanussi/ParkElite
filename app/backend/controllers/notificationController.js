@@ -132,6 +132,14 @@ exports.checkSpotConflicts = async (req, res) => {
     
     //console.log(`🔍 Verificando conflictos para plaza ${spotNumber}, ocupada: ${occupied}`);
     
+    const ParkingSpot = require('../models/parkingSpot');
+    const spot = await ParkingSpot.findOne({ spotNumber: spotNumber });
+    
+    if (!spot) {
+      console.log(`❌ Plaza ${spotNumber} no encontrada en BD`);
+      return res.status(404).json({ message: 'Plaza no encontrada' });
+    }
+
     // Buscar reserva actual que debería estar activa
     const currentReservation = await Reservation.findOne({
       parkingSpotId: spot._id,
