@@ -52,17 +52,33 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Future<void> loadNotifications() async {
     try {
       final data = await api!.getNotifications();
+      
+      if (data['success'] == false) {
+        print('⚠️ Respuesta con success=false');
+        setState(() {
+          notifications = [];
+          unreadCount = 0;
+          isLoading = false;
+          hasError = false; // Error = NO, solo lista vacía
+        });
+        return;
+      }
+      
       setState(() {
         notifications = data['notifications'] ?? [];
         unreadCount = data['unreadCount'] ?? 0;
         isLoading = false;
         hasError = false;
       });
+      
+      print('✅ Notificaciones cargadas: ${notifications.length}');
     } catch (e) {
-      print('Error al cargar notificaciones: $e');
+      print('❌ Error al cargar notificaciones: $e');
       setState(() {
-        hasError = true;
+        notifications = [];
+        unreadCount = 0;
         isLoading = false;
+        hasError = false;
       });
     }
   }

@@ -24,12 +24,17 @@ exports.createNotification = async (userId, type, title, message, reservationId 
 
 exports.getUserNotifications = async (req, res) => {
   try {
+    const User = require('../models/user');
+    const userDoc = await User.findOne({ _id: req.user.id });
+
+    if (!userDoc) {
+      return res.json({ success: false, notifications: [], unreadCount: 0 });
+    }
+
     const notifications = await Notification.find({ 
-      userId: req.user.id 
-    })
-    .sort({ createdAt: -1 })
-    .limit(50);
-    
+      userId: userDoc._id
+    }).sort({ createdAt: -1 }).limit(50);
+
     res.json({
       success: true,
       notifications,
@@ -190,6 +195,84 @@ exports.checkSpotConflicts = async (req, res) => {
 
   } catch (err) {
     console.error('Error en checkSpotConflicts:', err);
+    res.status(500).json({ message: 'Error del servidor' });
+  }
+};
+
+// crear notificación de prueba (desarrollo)
+exports.createTestNotification = async (req, res) => {
+  try {
+    const User = require('../models/user');
+    const userDoc = await User.findOne({ userId: req.user.id });
+    
+    if (!userDoc) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+    
+    const notification = await exports.createNotification(
+      userDoc._id,
+      'general',
+      '🧪 Notificación de Prueba',
+      'Esta es una notificación de prueba para verificar que el sistema funciona correctamente.',
+      null,
+      null
+    );
+    
+    if (!notification) {
+      return res.status(500).json({ message: 'Error al crear notificación' });
+    }
+    
+    res.json({
+      success: true,
+      message: 'Notificación de prueba creada',
+      notification
+    });
+  } catch (err) {
+    console.error('Error en createTestNotification:', err);
+    res.status(500).json({ message: 'Error del servidor' });
+  }
+};
+
+// Debug: Ver todas las notificaciones en la BD
+exports.debugAllNotifications = async (req, res) => {
+  try {
+    const allNotifications = await Notification.find()
+      .populate('userId', 'name email')
+      .sort({ createdAt: -1 })
+      .limit(100);
+    
+    const User = require('../models/user');
+    const allUsers = await User.find().select('userId _id name email');
+    
+    res.json({
+      success: true,
+      totalNotifications: allNotifications.length,
+      notifications: allNotifications,
+      totalUsers: allUsers.length,
+      users: allUsers,
+      requestUser: {
+        id: req.user?.id,
+        email: req.user?.email
+      }
+    });
+  } catch (err) {
+    console.error('Error en debugAllNotifications:', err);
+    res.status(500).json({ message: 'Error del servidor' });
+  }
+};
+
+// Limpiar todas las notificaciones (desarrollo)
+exports.clearAllNotifications = async (req, res) => {
+  try {
+    const result = await Notification.deleteMany({});
+    
+    res.json({
+      success: true,
+      message: `${result.deletedCount} notificaciones eliminadas`,
+      deletedCount: result.deletedCount
+    });
+  } catch (err) {
+    console.error('Error en clearAllNotifications:', err);
     res.status(500).json({ message: 'Error del servidor' });
   }
 };
