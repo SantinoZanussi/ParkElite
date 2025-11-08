@@ -14,7 +14,7 @@ exports.createNotification = async (userId, type, title, message, reservationId 
     });
     
     await notification.save();
-    console.log(`✅ Notificación creada para usuario ${userId}: ${title}`);
+    //console.log(`✅ Notificación creada para usuario ${userId}: ${title}`);
     return notification;
   } catch (error) {
     console.error('Error al crear notificación:', error);
@@ -24,15 +24,14 @@ exports.createNotification = async (userId, type, title, message, reservationId 
 
 exports.getUserNotifications = async (req, res) => {
   try {
-    const User = require('../models/user');
-    const userDoc = await User.findOne({ _id: req.user.id });
+    const userDoc = await User.findOne({ userId: req.user.id });
 
     if (!userDoc) {
       return res.json({ success: false, notifications: [], unreadCount: 0 });
     }
 
     const notifications = await Notification.find({ 
-      userId: userDoc._id
+      userId: userDoc._id 
     }).sort({ createdAt: -1 }).limit(50);
 
     res.json({
@@ -41,7 +40,7 @@ exports.getUserNotifications = async (req, res) => {
       unreadCount: notifications.filter(n => !n.read).length
     });
   } catch (err) {
-    console.error(err);
+    console.error('Error en getUserNotifications:', err);
     res.status(500).json({ message: 'Error del servidor' });
   }
 };
@@ -49,9 +48,14 @@ exports.getUserNotifications = async (req, res) => {
 exports.markAsRead = async (req, res) => {
   try {
     const { notificationId } = req.params;
+    const userDoc = await User.findOne({ userId: req.user.id });
+    
+    if (!userDoc) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
     
     const notification = await Notification.findOneAndUpdate(
-      { _id: notificationId, userId: req.user.id },
+      { _id: notificationId, userId: userDoc._id },
       { read: true },
       { new: true }
     );
@@ -69,8 +73,14 @@ exports.markAsRead = async (req, res) => {
 
 exports.markAllAsRead = async (req, res) => {
   try {
+    const userDoc = await User.findOne({ userId: req.user.id });
+    
+    if (!userDoc) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+    
     await Notification.updateMany(
-      { userId: req.user.id, read: false },
+      { userId: userDoc._id, read: false },
       { read: true }
     );
     
@@ -84,10 +94,15 @@ exports.markAllAsRead = async (req, res) => {
 exports.deleteNotification = async (req, res) => {
   try {
     const { notificationId } = req.params;
+    const userDoc = await User.findOne({ userId: req.user.id });
+    
+    if (!userDoc) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
     
     const notification = await Notification.findOneAndDelete({
       _id: notificationId,
-      userId: req.user.id
+      userId: userDoc._id
     });
     
     if (!notification) {
@@ -119,7 +134,7 @@ exports.checkSpotConflicts = async (req, res) => {
     
     // Buscar reserva actual que debería estar activa
     const currentReservation = await Reservation.findOne({
-      'parkingSpotId.spotNumber': spotNumber,
+      parkingSpotId: spot._id,
       startTime: { $lte: nowUTC },
       endTime: { $gte: nowUTC },
       status: { $nin: ['cancelado', 'completado'] }
@@ -127,7 +142,7 @@ exports.checkSpotConflicts = async (req, res) => {
 
     // Buscar próxima reserva que comienza ahora
     const nextReservation = await Reservation.findOne({
-      'parkingSpotId.spotNumber': spotNumber,
+      parkingSpotId: spot._id,
       startTime: { 
         $gte: nowUTC,
         $lte: new Date(nowUTC.getTime() + 30 * 60 * 1000) // En 30 min
@@ -139,48 +154,60 @@ exports.checkSpotConflicts = async (req, res) => {
 
     // CASO 1: Plaza ocupada pero reserva actual ya debería haber terminado
     if (occupied && currentReservation && currentReservation.endTime < nowUTC) {
-      console.log(`⚠️ Plaza ${spotNumber} ocupada después de tiempo de reserva`);
+      //console.log(`⚠️ Plaza ${spotNumber} ocupada después de tiempo de reserva`);
       
-      const notification1 = await exports.createNotification(
-        currentReservation.userId,
-        'vehicle_retention',
-        '⚠️ Tu reserva ha finalizado',
-        `Tu reserva en la Plaza ${spotNumber} ha terminado. Por favor, retira tu vehículo urgentemente para evitar inconvenientes.`,
-        currentReservation._id,
-        spotNumber
-      );
-      notificationsCreated.push(notification1);
+      const currentUser = await User.findOne({ userId: currentReservation.userId });
+      
+      if (currentUser) {
+        const notification1 = await exports.createNotification(
+          currentUser._id,
+          'vehicle_retention',
+          '⚠️ Tu reserva ha finalizado',
+          `Tu reserva en la Plaza ${spotNumber} ha terminado. Por favor, retira tu vehículo urgentemente para evitar inconvenientes.`,
+          currentReservation._id,
+          spotNumber
+        );
+        notificationsCreated.push(notification1);
+      }
 
       // Notificar que la plaza está ocupada (si es que hay)
       if (nextReservation) {
-        const notification2 = await exports.createNotification(
-          nextReservation.userId,
-          'spot_occupied',
-          '⏳ Tu plaza está temporalmente ocupada',
-          `La Plaza ${spotNumber} sigue ocupada por otro vehículo. Por favor aguarda unos minutos y espera instrucciones del encargado del estacionamiento.`,
-          nextReservation._id,
-          spotNumber
-        );
-        notificationsCreated.push(notification2);
+        const nextUser = await User.findOne({ userId: nextReservation.userId });
         
-        console.log(`📢 Notificaciones enviadas: retención y ocupación temporal`);
+        if (nextUser) {
+          const notification2 = await exports.createNotification(
+            nextUser._id,
+            'spot_occupied',
+            '⏳ Tu plaza está temporalmente ocupada',
+            `La Plaza ${spotNumber} sigue ocupada por otro vehículo. Por favor aguarda unos minutos y espera instrucciones del encargado del estacionamiento.`,
+            nextReservation._id,
+            spotNumber
+          );
+          notificationsCreated.push(notification2);
+        }
+        
+        //console.log(`📢 Notificaciones enviadas: retención y ocupación temporal`);
       }
     }
 
     // CASO 2: Plaza liberada y notificar al próximo usuario
     if (!occupied && nextReservation && 
         new Date(nextReservation.startTime) <= new Date(nowUTC.getTime() + 5 * 60 * 1000)) {
-      console.log(`✅ Plaza ${spotNumber} liberada, notificando próximo usuario`);
+      //console.log(`✅ Plaza ${spotNumber} liberada, notificando próximo usuario`);
       
-      const notification3 = await exports.createNotification(
-        nextReservation.userId,
-        'general',
-        '✅ Tu plaza está disponible',
-        `La Plaza ${spotNumber} ya está disponible. Puedes ingresar cuando estés listo.`,
-        nextReservation._id,
-        spotNumber
-      );
-      notificationsCreated.push(notification3);
+      const nextUser = await User.findOne({ userId: nextReservation.userId });
+      
+      if (nextUser) {
+        const notification3 = await exports.createNotification(
+          nextUser._id,
+          'general',
+          '✅ Tu plaza está disponible',
+          `La Plaza ${spotNumber} ya está disponible. Puedes ingresar cuando estés listo.`,
+          nextReservation._id,
+          spotNumber
+        );
+        notificationsCreated.push(notification3);
+      }
     }
 
     res.json({
@@ -202,7 +229,6 @@ exports.checkSpotConflicts = async (req, res) => {
 // crear notificación de prueba (desarrollo)
 exports.createTestNotification = async (req, res) => {
   try {
-    const User = require('../models/user');
     const userDoc = await User.findOne({ userId: req.user.id });
     
     if (!userDoc) {
@@ -241,7 +267,6 @@ exports.debugAllNotifications = async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(100);
     
-    const User = require('../models/user');
     const allUsers = await User.find().select('userId _id name email');
     
     res.json({
