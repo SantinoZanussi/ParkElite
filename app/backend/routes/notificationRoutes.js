@@ -18,4 +18,12 @@ router.delete('/:notificationId', authMiddleware, notificationController.deleteN
 // webhook desde ESP8266 para reportar ocupación
 router.post('/check-conflicts', notificationController.checkSpotConflicts);
 
+/* SOLO DESARROLLO */
+
+router.post('/test', notificationController.createTestNotification);
+
+router.get('/debug/all', notificationController.debugAllNotifications);
+
+router.delete('/debug/clear-all', notificationController.clearAllNotifications);
+
 module.exports = router;
