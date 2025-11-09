@@ -10,8 +10,8 @@
   #include <SoftwareSerial.h>
 
   // --- CONFIGURACIÓN ---
-  const char* WIFI_SSID         = "Fibertel WiFi503 2.4GHz_EXT";
-  const char* WIFI_PASSWORD     = "00427636604";
+  const char* WIFI_SSID         = "LAPTOP ANEXO 1";
+  const char* WIFI_PASSWORD     = "Anexo2043";
   const char* API_HOST_DOMAIN   = "parkelite.onrender.com";
 
   // --- RUTAS API ---
