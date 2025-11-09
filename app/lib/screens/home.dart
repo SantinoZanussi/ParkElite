@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import '../widgets/cards.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../utils/navigateTo.dart';
 import '../services/api_service.dart';
 import '../utils/connectivity_service.dart';
+import '../services/local_notification_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -13,6 +15,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreen extends State<HomeScreen> {
+  Timer? _notificationTimer;
   ApiService? api;
   String? userName;
   bool isLoading = true;
@@ -23,6 +26,15 @@ class _HomeScreen extends State<HomeScreen> {
     super.initState();
     initializeAndLoad();
     loadUser();
+
+    _notificationTimer = Timer.periodic(Duration(seconds: 10), (timer) async {
+      await LocalNotificationService().checkForNewNotifications();
+    });
+  }
+
+  void dispose() {
+    _notificationTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> initializeAndLoad() async {

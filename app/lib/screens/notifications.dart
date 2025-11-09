@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../services/api_service.dart';
+import '../services/local_notification_service.dart';
 import '../utils/connectivity_service.dart';
 
 class NotificationsScreen extends StatefulWidget {
@@ -32,6 +33,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         apiService: api!,
         onSuccess: () async {
           await loadNotifications();
+          await LocalNotificationService().checkForNewNotifications();
         },
         onError: () {
           setState(() {
@@ -59,7 +61,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           notifications = [];
           unreadCount = 0;
           isLoading = false;
-          hasError = false; // Error = NO, solo lista vacía
+          hasError = false;
         });
         return;
       }
@@ -96,9 +98,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     try {
       await api!.deleteNotification(notificationId);
       await loadNotifications();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Notificación eliminada')),
-      );
     } catch (e) {
       print('Error al eliminar: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -201,27 +200,40 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           fontWeight: FontWeight.w900,
                         ),
                       ),
-                      if (unreadCount > 0)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFF6B6B),
-                            borderRadius: BorderRadius.circular(20),
+                      Row(
+                        children: [
+                          IconButton(
+                            icon: Icon(Icons.refresh, color: Color(0xFF4A90E2)),
+                            onPressed: () async {
+                              setState(() => isLoading = true);
+                              await loadNotifications();
+                              await LocalNotificationService().checkForNewNotifications();
+                              setState(() => isLoading = false);
+                            },
+                            tooltip: 'Sincronizar',
                           ),
-                          child: Text(
-                            '$unreadCount nuevas',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
+                          if (unreadCount > 0)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFF6B6B),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                unreadCount == 1 ? '$unreadCount nueva' : '$unreadCount nuevas',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
                 
-                // Lista de notificaciones
                 Expanded(
                   child: notifications.isEmpty
                       ? Center(
@@ -245,7 +257,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           ),
                         )
                       : RefreshIndicator(
-                          onRefresh: loadNotifications,
+                          onRefresh: () async {
+                            await loadNotifications();
+                            await LocalNotificationService().checkForNewNotifications();
+                          },
                           child: ListView.builder(
                             padding: const EdgeInsets.all(15),
                             itemCount: notifications.length,

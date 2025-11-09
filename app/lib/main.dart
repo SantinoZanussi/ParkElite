@@ -4,11 +4,19 @@ import './screens/home.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import './services/api_service.dart';
+import './services/local_notification_service.dart';
+import './screens/notifications.dart';
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await LocalNotificationService().initialize();
+
   final api = ApiService();
   await api.initBaseUrl();
+
   runApp(MyApp(apiService: api));
 }
 
@@ -23,6 +31,10 @@ class MyApp extends StatelessWidget {
       title: 'ParkElite',
       theme: ThemeData(fontFamily: 'SanFrancisco', useMaterial3: true),
       home: AuthWrapper(apiService: apiService),
+      navigatorKey: navigatorKey,
+      routes: {
+        'notificaciones': (context) => NotificationsScreen(),
+      },
     );
   }
 }
@@ -60,7 +72,6 @@ class AuthWrapper extends StatelessWidget {
         }
 
         if (snapshot.data == true) {
-          // si está logueado, verificamos la conexión a internet
           return FutureBuilder<bool>(
             future: hasInternet(),
             builder: (context, internetSnapshot) {
