@@ -22,7 +22,7 @@
   static const char* ENDPOINT_CANCEL_RESERVATION = "/api/reservas/cancel-arrival";
   static const char* ENDPOINT_CANCEL_SPECIFIC_RESERVATION = "/api/reservas/cancel";
   static const char* ENDPOINT_GET_ACTIVE_RESERVATIONS = "/api/reservas/active-reservations";
-  static const char* ENDPOINT_CHECK_CONFLICTS = "/api/reservas/check-conflicts";
+  static const char* ENDPOINT_CHECK_CONFLICTS = "/api/notifications/check-conflicts";
 
   // --- PINES RFID Y SOFTWARE SERIAL ---
   #define SS_PIN D1
